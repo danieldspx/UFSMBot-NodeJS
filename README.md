@@ -1,14 +1,10 @@
 # UFSMBot-Node.js
+
 Este projeto foi criado com propósitos educacionais.
 
 >Qualquer sugestão de nome melhor é bem vindo
 
-[![](https://ufsmbot.herokuapp.com)](https://img.shields.io/badge/app-online-brightgreen.svg)
-
-## To-Do
-
- - Lista de exceções (A pessoa pode colocar um dia em especifico em que sabe que não vai comparecer. Desse modo o BOT ignoraria esse dia mesmo que ele estivesse presente na rotina)
- >Contribuições com ideias e no código são bem vindas
+[![](https://img.shields.io/badge/app-online-brightgreen.svg)](https://ufsmbot.herokuapp.com) [![](https://img.shields.io/badge/app-front--end-brightgreen.svg)](https://github.com/danieldspx/UFSMBot-Angular) [![](https://img.shields.io/badge/app-back--end-brightgreen.svg)](https://github.com/danieldspx/UFSMBot-NodeJS) [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/danieldspx/UFSMBot-NodeJS/issues) [![](http://inch-ci.org/github/danieldspx/UFSMBot-NodeJS.svg?branch=develop)](http://inch-ci.org/github/danieldspx/UFSMBot-NodeJS)
 
 ## Instalação
 Para poder rodar este projeto localmente você vai precisar do:
