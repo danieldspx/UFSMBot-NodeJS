@@ -55,6 +55,7 @@ var crypto = require("crypto");
 var cors = require("cors");
 var fetch = require('node-fetch');
 var _ = require('lodash');
+require('dotenv').config();
 //Const variables
 var app = express();
 var PORT = process.env.PORT || 5000;
@@ -65,7 +66,7 @@ admin.initializeApp({
 });
 var db = admin.firestore();
 app.enable('trust proxy');
-app.use(express.json(), express.static('public'), cors());
+app.use(requireHTTPS, express.json(), express.static('public'), cors());
 app.listen(PORT, function () {
     console.log("UFSMBot Listening on " + PORT);
 });
@@ -133,7 +134,7 @@ app.post('/api/agendar', function (req, res) {
     });
 });
 app.get('/api/agendamento', function (req, res) {
-    getStudentsRef(10, 0)
+    getStudentsRef(100, 0)
         .then(function (studentsWrapper) {
         if (Array.isArray(studentsWrapper)) {
             var allSchedules = [];

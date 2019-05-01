@@ -97,7 +97,7 @@ app.post('/api/agendar', (req, res) => {
 })
 
 app.get('/api/agendamento', (req, res) => {
-  getStudentsRef(10,0)
+  getStudentsRef(100,0)
   .then((studentsWrapper) => {
     if(Array.isArray(studentsWrapper)){
       let allSchedules = [];
