@@ -55,7 +55,6 @@ var crypto = require("crypto");
 var cors = require("cors");
 var fetch = require('node-fetch');
 var _ = require('lodash');
-require('dotenv').config();
 //Const variables
 var app = express();
 var PORT = process.env.PORT || 5000;

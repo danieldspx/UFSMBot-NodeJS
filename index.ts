@@ -7,7 +7,6 @@ import crypto = require('crypto');
 import cors = require('cors');
 const fetch = require('node-fetch');
 const _ = require('lodash');
-require('dotenv').config();
 //Interfaces
 import { RequestConfig } from './interfaces/request-config';
 import { Schedule } from './interfaces/schedule';
