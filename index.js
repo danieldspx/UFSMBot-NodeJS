@@ -152,7 +152,6 @@ app.get('/api/agendamento', function (req, res) {
             message: 'mass schedule executed successfully'
         });
     })["catch"](function (error) {
-        console.log(error);
         res.status(400).send({
             message: error
         });
