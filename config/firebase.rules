@@ -1,0 +1,29 @@
+service cloud.firestore {
+
+  match /databases/{database}/documents {
+
+    match /estudantes/{estudanteID}{
+
+    	function requestOwnsData(){//True if the request is coming from the student owner
+      	return request.auth.token.matricula == resource.data.matricula;
+      }
+      allow create: if request.auth != null;
+    	allow delete: if false;
+      allow read: if requestOwnsData();
+      allow update: if requestOwnsData() && request.resource.data.matricula == resource.data.matricula;
+
+      match /{document=**} {
+
+        function requestAllowed(){//True if the request is coming from the owner
+        	return request.auth.token.matricula == get(/databases/$(database)/documents/estudantes/$(estudanteID)).data.matricula;
+        }
+
+        allow write, read: if requestAllowed();
+
+      }
+
+    }
+
+  }
+
+}
