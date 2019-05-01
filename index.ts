@@ -274,7 +274,7 @@ async function getStudentByMatricula(matricula: string, password: string){
 }
 
 async function getStudentsRef(limit: number, offset: number): Promise<StudentWrapper[] | boolean>{
-  const today = new Date();
+  const today = moment();
   let studentsRef:StudentWrapper[] = [];
   return db.collection('estudantes')
   .where('lastSchedule', '==', null)
@@ -291,7 +291,7 @@ async function getStudentsRef(limit: number, offset: number): Promise<StudentWra
       });
     })
     return db.collection('estudantes')
-    .where('lastSchedule','<',today)
+    .where('lastSchedule','<',today.add(3, 'days').toDate())
     .limit(limit)
     .offset(offset)
     .get()

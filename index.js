@@ -329,7 +329,7 @@ function getStudentsRef(limit, offset) {
     return __awaiter(this, void 0, void 0, function () {
         var today, studentsRef;
         return __generator(this, function (_a) {
-            today = new Date();
+            today = moment();
             studentsRef = [];
             return [2 /*return*/, db.collection('estudantes')
                     .where('lastSchedule', '==', null)
@@ -346,7 +346,7 @@ function getStudentsRef(limit, offset) {
                         });
                     });
                     return db.collection('estudantes')
-                        .where('lastSchedule', '<', today)
+                        .where('lastSchedule', '<', today.add(3, 'days').toDate())
                         .limit(limit)
                         .offset(offset)
                         .get();
