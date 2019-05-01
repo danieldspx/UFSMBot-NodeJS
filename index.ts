@@ -7,6 +7,7 @@ import crypto = require('crypto');
 import cors = require('cors');
 const fetch = require('node-fetch');
 const _ = require('lodash');
+// require('dotenv').config(); Remova o comentario quando em desenvolvimento
 //Interfaces
 import { RequestConfig } from './interfaces/request-config';
 import { Schedule } from './interfaces/schedule';
@@ -23,7 +24,7 @@ admin.initializeApp({
 })
 const db = admin.firestore();
 app.enable('trust proxy');
-app.use(requireHTTPS, express.json(), express.static('public'), cors());
+app.use(requireHTTPS, express.json(), express.static('public'), cors());//Remova o requireHTTPS quando em Desenvolvimento
 app.listen(PORT, () => {
   console.log(`UFSMBot Listening on ${ PORT }`);
 })

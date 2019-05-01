@@ -65,7 +65,7 @@ admin.initializeApp({
 });
 var db = admin.firestore();
 app.enable('trust proxy');
-app.use(requireHTTPS, express.json(), express.static('public'), cors());
+app.use(requireHTTPS, express.json(), express.static('public'), cors()); //Remova o requireHTTPS quando em Desenvolvimento
 app.listen(PORT, function () {
     console.log("UFSMBot Listening on " + PORT);
 });
