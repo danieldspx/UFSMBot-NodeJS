@@ -7,13 +7,14 @@ import crypto = require('crypto');
 import cors = require('cors');
 const fetch = require('node-fetch');
 const _ = require('lodash');
-// require('dotenv').config(); Remova o comentario quando em desenvolvimento
+// require('dotenv').config(); //Remova o comentario quando em desenvolvimento
 //Interfaces
 import { RequestConfig } from './interfaces/request-config';
 import { Schedule } from './interfaces/schedule';
 import { StudentWrapper } from './interfaces/student-wrapper';
 import { RoutineWrapper } from './interfaces/routine-wrapper';
 import { DocumentReference } from '@google-cloud/firestore';
+import { Moment } from 'moment';
 //Const variables
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -135,16 +136,17 @@ function requireHTTPS(req, res, next) {
     next();
 }
 
-async function executeFlowAgendamento(schedule: Schedule, isLast: boolean = true): Promise<void>{
+async function executeFlowAgendamento(schedule: Schedule, studentRef: string = '', isLast: boolean = true): Promise<void>{
   return agendarRefeicao(schedule)
   .then((response) => {
     if(response.status === 200){
       console.log('Sucesso ao agendar', schedule.matricula, schedule.dia);
     } else {
-      throw new Error('Erro ao agendar');
+      throw new Error(`Erro ao agendar (${response.status}) - ${schedule.matricula} - ${schedule.dia}`);
     }
   })
   .catch((error) => {
+    console.log(studentRef);//TODO: Save the errors and try again later
     console.log(error);
   })
   .finally(() => {
@@ -331,37 +333,40 @@ async function getStudentRoutines(ref: string): Promise<RoutineWrapper[] | boole
 async function startScheduleForStudent(student: StudentWrapper): Promise<void[]>{
   let routines = await getStudentRoutines(student.ref);
   if(Array.isArray(routines)){
-    for (let routine of routines) {
-      let session = await getLoginSessionID(student.matricula, student.password);
-      if(session !== false){
-        if(isValidSession(<string>session)){
-          let agendamentos: Promise<void>[] = [];
-          const days = convertDaysToSchedule(routine.dias);
-          days.forEach((day, index) => {
-            let schedule = {
-              dia: day,
-              restaurante: routine.restaurante,
-              refeicao: routine.tiposRefeicao,
-              matricula: student.matricula,
-              password: student.password,
-              session: <string>session
-            };
-            agendamentos.push(
-              executeFlowAgendamento(schedule, isLastIndex(index, days))
-            )
-          })
-
-          try{
-            await db.doc(student.ref).update({
-              lastSchedule: moment(days.pop(), "DD/MM/YYYY").toDate()
-            });
-          }catch(e){
-            console.log('Error', e);
-          }
-
-          return Promise.all(agendamentos);
+    let session = await getLoginSessionID(student.matricula, student.password);
+    if(session !== false && isValidSession(<string>session)){
+      let agendamentos: Promise<void>[] = [];
+      let lastSchedule: Moment;
+      for (let routine of routines) {
+        const days = convertDaysToSchedule(routine.dias);
+        const lastDay = moment(_.last(days), "DD/MM/YYYY");
+        if(isUndefined(lastSchedule)){
+          lastSchedule = lastDay;
+        } else if(lastSchedule.isBefore(lastDay)) {
+          lastSchedule = lastDay;
         }
+        days.forEach((day, index) => {
+          let schedule = {
+            dia: day,
+            restaurante: routine.restaurante,
+            refeicao: routine.tiposRefeicao,
+            matricula: student.matricula,
+            password: student.password,
+            session: <string>session
+          };
+          agendamentos.push(
+            executeFlowAgendamento(schedule, student.ref, isLastIndex(index, days))
+          )
+        })
       }
+      try{
+        await db.doc(student.ref).update({
+          lastSchedule: lastSchedule.toDate()
+        });
+      }catch(e){
+        console.log('Error', e);
+      }
+      return Promise.all(agendamentos);
     }
   } else {
     console.log("getStudentRoutines returned false");
@@ -421,7 +426,7 @@ function removeUnecessaryDates(dates: string[]): string[]{
 }
 
 function isValidSession(session: string): boolean{
-  return session.indexOf('JSESSIONID') !== -1;
+  return session.toString().indexOf('JSESSIONID') !== -1;
 }
 
 function isUndefined(variable): boolean{

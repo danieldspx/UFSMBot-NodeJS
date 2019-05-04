@@ -167,7 +167,8 @@ function requireHTTPS(req, res, next) {
     }
     next();
 }
-function executeFlowAgendamento(schedule, isLast) {
+function executeFlowAgendamento(schedule, studentRef, isLast) {
+    if (studentRef === void 0) { studentRef = ''; }
     if (isLast === void 0) { isLast = true; }
     return __awaiter(this, void 0, void 0, function () {
         return __generator(this, function (_a) {
@@ -177,9 +178,10 @@ function executeFlowAgendamento(schedule, isLast) {
                         console.log('Sucesso ao agendar', schedule.matricula, schedule.dia);
                     }
                     else {
-                        throw new Error('Erro ao agendar');
+                        throw new Error("Erro ao agendar (" + response.status + ") - " + schedule.matricula + " - " + schedule.dia);
                     }
                 })["catch"](function (error) {
+                    console.log(studentRef); //TODO: Save the errors and try again later
                     console.log(error);
                 })["finally"](function () {
                     if (!isUndefined(schedule.session) && isLast) {
@@ -386,72 +388,63 @@ function getStudentRoutines(ref) {
 }
 function startScheduleForStudent(student) {
     return __awaiter(this, void 0, void 0, function () {
-        var routines, _loop_1, _i, routines_1, routine, state_1;
+        var routines, session_1, agendamentos_1, lastSchedule, _loop_1, _i, routines_1, routine, e_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, getStudentRoutines(student.ref)];
                 case 1:
                     routines = _a.sent();
-                    if (!Array.isArray(routines)) return [3 /*break*/, 6];
+                    if (!Array.isArray(routines)) return [3 /*break*/, 8];
+                    return [4 /*yield*/, getLoginSessionID(student.matricula, student.password)];
+                case 2:
+                    session_1 = _a.sent();
+                    if (!(session_1 !== false && isValidSession(session_1))) return [3 /*break*/, 7];
+                    agendamentos_1 = [];
+                    lastSchedule = void 0;
                     _loop_1 = function (routine) {
-                        var session, agendamentos_1, days_1, e_1;
-                        return __generator(this, function (_a) {
-                            switch (_a.label) {
-                                case 0: return [4 /*yield*/, getLoginSessionID(student.matricula, student.password)];
-                                case 1:
-                                    session = _a.sent();
-                                    if (!(session !== false)) return [3 /*break*/, 6];
-                                    if (!isValidSession(session)) return [3 /*break*/, 6];
-                                    agendamentos_1 = [];
-                                    days_1 = convertDaysToSchedule(routine.dias);
-                                    days_1.forEach(function (day, index) {
-                                        var schedule = {
-                                            dia: day,
-                                            restaurante: routine.restaurante,
-                                            refeicao: routine.tiposRefeicao,
-                                            matricula: student.matricula,
-                                            password: student.password,
-                                            session: session
-                                        };
-                                        agendamentos_1.push(executeFlowAgendamento(schedule, isLastIndex(index, days_1)));
-                                    });
-                                    _a.label = 2;
-                                case 2:
-                                    _a.trys.push([2, 4, , 5]);
-                                    return [4 /*yield*/, db.doc(student.ref).update({
-                                            lastSchedule: moment(days_1.pop(), "DD/MM/YYYY").toDate()
-                                        })];
-                                case 3:
-                                    _a.sent();
-                                    return [3 /*break*/, 5];
-                                case 4:
-                                    e_1 = _a.sent();
-                                    console.log('Error', e_1);
-                                    return [3 /*break*/, 5];
-                                case 5: return [2 /*return*/, { value: Promise.all(agendamentos_1) }];
-                                case 6: return [2 /*return*/];
-                            }
+                        var days = convertDaysToSchedule(routine.dias);
+                        var lastDay = moment(_.last(days), "DD/MM/YYYY");
+                        if (isUndefined(lastSchedule)) {
+                            lastSchedule = lastDay;
+                        }
+                        else if (lastSchedule.isBefore(lastDay)) {
+                            lastSchedule = lastDay;
+                        }
+                        days.forEach(function (day, index) {
+                            var schedule = {
+                                dia: day,
+                                restaurante: routine.restaurante,
+                                refeicao: routine.tiposRefeicao,
+                                matricula: student.matricula,
+                                password: student.password,
+                                session: session_1
+                            };
+                            agendamentos_1.push(executeFlowAgendamento(schedule, student.ref, isLastIndex(index, days)));
                         });
                     };
-                    _i = 0, routines_1 = routines;
-                    _a.label = 2;
-                case 2:
-                    if (!(_i < routines_1.length)) return [3 /*break*/, 5];
-                    routine = routines_1[_i];
-                    return [5 /*yield**/, _loop_1(routine)];
+                    for (_i = 0, routines_1 = routines; _i < routines_1.length; _i++) {
+                        routine = routines_1[_i];
+                        _loop_1(routine);
+                    }
+                    _a.label = 3;
                 case 3:
-                    state_1 = _a.sent();
-                    if (typeof state_1 === "object")
-                        return [2 /*return*/, state_1.value];
-                    _a.label = 4;
+                    _a.trys.push([3, 5, , 6]);
+                    return [4 /*yield*/, db.doc(student.ref).update({
+                            lastSchedule: lastSchedule.toDate()
+                        })];
                 case 4:
-                    _i++;
-                    return [3 /*break*/, 2];
-                case 5: return [3 /*break*/, 7];
-                case 6:
+                    _a.sent();
+                    return [3 /*break*/, 6];
+                case 5:
+                    e_1 = _a.sent();
+                    console.log('Error', e_1);
+                    return [3 /*break*/, 6];
+                case 6: return [2 /*return*/, Promise.all(agendamentos_1)];
+                case 7: return [3 /*break*/, 9];
+                case 8:
                     console.log("getStudentRoutines returned false");
                     return [2 /*return*/, null];
-                case 7: return [2 /*return*/];
+                case 9: return [2 /*return*/];
             }
         });
     });
@@ -498,7 +491,7 @@ function removeUnecessaryDates(dates) {
     });
 }
 function isValidSession(session) {
-    return session.indexOf('JSESSIONID') !== -1;
+    return session.toString().indexOf('JSESSIONID') !== -1;
 }
 function isUndefined(variable) {
     return typeof variable === 'undefined';
