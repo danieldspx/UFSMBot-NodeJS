@@ -4,3 +4,5 @@ teste.js
 done.txt
 config/serviceAccountKey.json
 deploy.sh
+*.log
+start.sh

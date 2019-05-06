@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import * as querystring from 'querystring';
+import * as NodeLogger from 'simple-node-logger';
 //Requires
 import express = require('express');
 import moment = require('moment');
@@ -7,7 +8,7 @@ import crypto = require('crypto');
 import cors = require('cors');
 const fetch = require('node-fetch');
 const _ = require('lodash');
-// require('dotenv').config(); //Remova o comentario quando em desenvolvimento
+require('dotenv').config(); //Apenas para Desenvolvimento
 //Interfaces
 import { RequestConfig } from './interfaces/request-config';
 import { Schedule } from './interfaces/schedule';
@@ -20,6 +21,10 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 //Initialization
 const serviceAccount = require("./config/serviceAccountKey.json");
+const log = NodeLogger.createSimpleLogger({
+  logFilePath:'ufsmbot.log',
+  timestampFormat:'DD-MM-YYYY HH:mm:ss'
+});
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 })
@@ -27,7 +32,7 @@ const db = admin.firestore();
 app.enable('trust proxy');
 app.use(requireHTTPS, express.json(), express.static('public'), cors());//Remova o requireHTTPS quando em Desenvolvimento
 app.listen(PORT, () => {
-  console.log(`UFSMBot Listening on ${ PORT }`);
+  log.info(`UFSMBot Listening on ${ PORT }`);
 })
 
 app.get('/', callAngularApp);
@@ -67,9 +72,9 @@ app.post('/auth/login', (req, res) => {
       logOut(currentSession)
       .then((response: any) => {
         if(response.status === 200){
-          console.log('Logout realizado', currentSession);
+          log.info(`Logout realizado ${currentSession}`);
         } else {
-          console.log('Erro ao fazer logout', currentSession);
+          log.error(`Erro ao fazer logout ${currentSession}`);
         }
       })
     }
@@ -129,7 +134,7 @@ function callAngularApp(req, res) {
 }
 
 function requireHTTPS(req, res, next) {
-    if (!req.secure) {
+    if (!req.secure && !isDevMode()) {
         //FYI this should work for local development as well
         return res.redirect('https://' + req.get('host') + req.url);
     }
@@ -140,23 +145,23 @@ async function executeFlowAgendamento(schedule: Schedule, studentRef: string = '
   return agendarRefeicao(schedule)
   .then((response) => {
     if(response.status === 200){
-      console.log('Sucesso ao agendar', schedule.matricula, schedule.dia);
+      log.info(`Sucesso ao agendar ${schedule.matricula} ${schedule.dia}`);
     } else {
       throw new Error(`Erro ao agendar (${response.status}) - ${schedule.matricula} - ${schedule.dia}`);
     }
   })
   .catch((error) => {
-    console.log(studentRef);//TODO: Save the errors and try again later
-    console.log(error);
+    saveError(studentRef, {...schedule});
+    log.error(error.message);
   })
   .finally(() => {
     if(!isUndefined(schedule.session) && isLast){
       logOut(schedule.session)
       .then((response: any) => {
         if(response.status === 200){
-          console.log('Logout realizado');
+          log.info(`Logout realizado ${schedule.session}`);
         } else {
-          console.log('Erro ao fazer logout');
+          log.error(`Erro ao fazer logout ${schedule.session}`);
         }
       });
     }
@@ -173,11 +178,10 @@ async function getLoginSessionID(matricula: string, password: string): Promise<s
     referrer: 'https://portal.ufsm.br/ru/index.html',
     url: 'https://portal.ufsm.br/ru/j_security_check'
   };
-
   return makeRequest(requestConfig)
   .then((response: any) => {
     if(response.url.indexOf('jsessionid') !== -1){
-      console.log("Login realizado", matricula);
+      log.info(`Login realizado ${matricula}`);
       return response.url.split(';')[1].replace("jsessionid=", "JSESSIONID=");
     }
     throw new Error('login failed');
@@ -293,7 +297,7 @@ async function getStudentsRef(limit: number, offset: number): Promise<StudentWra
       });
     })
     return db.collection('estudantes')
-    .where('lastSchedule','<',today.add(3, 'days').toDate())
+    .where('lastSchedule','<',today.add(2, 'days').toDate())
     .limit(limit)
     .offset(offset)
     .get()
@@ -333,7 +337,12 @@ async function getStudentRoutines(ref: string): Promise<RoutineWrapper[] | boole
 async function startScheduleForStudent(student: StudentWrapper): Promise<void[]>{
   let routines = await getStudentRoutines(student.ref);
   if(Array.isArray(routines)){
-    let session = await getLoginSessionID(student.matricula, student.password);
+    let session;
+    try {
+      session = await getLoginSessionID(student.matricula, student.password);
+    } catch(e) {
+      log.error(e);
+    }
     if(session !== false && isValidSession(<string>session)){
       let agendamentos: Promise<void>[] = [];
       let lastSchedule: Moment;
@@ -364,14 +373,30 @@ async function startScheduleForStudent(student: StudentWrapper): Promise<void[]>
           lastSchedule: lastSchedule.toDate()
         });
       }catch(e){
-        console.log('Error', e);
+        log.error(e);
       }
       return Promise.all(agendamentos);
     }
   } else {
-    console.log("getStudentRoutines returned false");
+    log.error("getStudentRoutines returned false");
     return null;
   }
+}
+
+function saveError(studentRef: string, schedule: Schedule){
+  delete schedule.password;
+  delete schedule.session;
+  return db.collection('errors').add({
+    resolved: false,
+    estudante: studentRef,
+    schedule: schedule
+  })
+  .then(() => {
+    log.info('Erro salvo');
+  })
+  .catch((e) => {
+    log.error(`Erro ao salvar o erro ${e}`);
+  })
 }
 
 function encrypt(text: string){
@@ -435,4 +460,8 @@ function isUndefined(variable): boolean{
 
 function isLastIndex(pos, arrayCheck){
   return arrayCheck.length === (pos+1)
+}
+
+function isDevMode(): boolean{
+  return process.env.DEV === "true";
 }

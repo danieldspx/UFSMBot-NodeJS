@@ -48,6 +48,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 exports.__esModule = true;
 var admin = require("firebase-admin");
 var querystring = require("querystring");
+var NodeLogger = require("simple-node-logger");
 //Requires
 var express = require("express");
 var moment = require("moment");
@@ -55,11 +56,16 @@ var crypto = require("crypto");
 var cors = require("cors");
 var fetch = require('node-fetch');
 var _ = require('lodash');
+require('dotenv').config(); //Apenas para Desenvolvimento
 //Const variables
 var app = express();
 var PORT = process.env.PORT || 5000;
 //Initialization
 var serviceAccount = require("./config/serviceAccountKey.json");
+var log = NodeLogger.createSimpleLogger({
+    logFilePath: 'ufsmbot.log',
+    timestampFormat: 'DD-MM-YYYY HH:mm:ss'
+});
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 });
@@ -67,7 +73,7 @@ var db = admin.firestore();
 app.enable('trust proxy');
 app.use(requireHTTPS, express.json(), express.static('public'), cors()); //Remova o requireHTTPS quando em Desenvolvimento
 app.listen(PORT, function () {
-    console.log("UFSMBot Listening on " + PORT);
+    log.info("UFSMBot Listening on " + PORT);
 });
 app.get('/', callAngularApp);
 app.get('/login', callAngularApp);
@@ -103,10 +109,10 @@ app.post('/auth/login', function (req, res) {
             logOut(currentSession)
                 .then(function (response) {
                 if (response.status === 200) {
-                    console.log('Logout realizado', currentSession);
+                    log.info("Logout realizado " + currentSession);
                 }
                 else {
-                    console.log('Erro ao fazer logout', currentSession);
+                    log.error("Erro ao fazer logout " + currentSession);
                 }
             });
         }
@@ -161,7 +167,7 @@ function callAngularApp(req, res) {
     res.sendFile('public/index.html', { root: __dirname });
 }
 function requireHTTPS(req, res, next) {
-    if (!req.secure) {
+    if (!req.secure && !isDevMode()) {
         //FYI this should work for local development as well
         return res.redirect('https://' + req.get('host') + req.url);
     }
@@ -175,23 +181,23 @@ function executeFlowAgendamento(schedule, studentRef, isLast) {
             return [2 /*return*/, agendarRefeicao(schedule)
                     .then(function (response) {
                     if (response.status === 200) {
-                        console.log('Sucesso ao agendar', schedule.matricula, schedule.dia);
+                        log.info("Sucesso ao agendar " + schedule.matricula + " " + schedule.dia);
                     }
                     else {
                         throw new Error("Erro ao agendar (" + response.status + ") - " + schedule.matricula + " - " + schedule.dia);
                     }
                 })["catch"](function (error) {
-                    console.log(studentRef); //TODO: Save the errors and try again later
-                    console.log(error);
+                    saveError(studentRef, __assign({}, schedule));
+                    log.error(error.message);
                 })["finally"](function () {
                     if (!isUndefined(schedule.session) && isLast) {
                         logOut(schedule.session)
                             .then(function (response) {
                             if (response.status === 200) {
-                                console.log('Logout realizado');
+                                log.info("Logout realizado " + schedule.session);
                             }
                             else {
-                                console.log('Erro ao fazer logout');
+                                log.error("Erro ao fazer logout " + schedule.session);
                             }
                         });
                     }
@@ -215,7 +221,7 @@ function getLoginSessionID(matricula, password) {
             return [2 /*return*/, makeRequest(requestConfig)
                     .then(function (response) {
                     if (response.url.indexOf('jsessionid') !== -1) {
-                        console.log("Login realizado", matricula);
+                        log.info("Login realizado " + matricula);
                         return response.url.split(';')[1].replace("jsessionid=", "JSESSIONID=");
                     }
                     throw new Error('login failed');
@@ -348,7 +354,7 @@ function getStudentsRef(limit, offset) {
                         });
                     });
                     return db.collection('estudantes')
-                        .where('lastSchedule', '<', today.add(3, 'days').toDate())
+                        .where('lastSchedule', '<', today.add(2, 'days').toDate())
                         .limit(limit)
                         .offset(offset)
                         .get();
@@ -388,17 +394,26 @@ function getStudentRoutines(ref) {
 }
 function startScheduleForStudent(student) {
     return __awaiter(this, void 0, void 0, function () {
-        var routines, session_1, agendamentos_1, lastSchedule, _loop_1, _i, routines_1, routine, e_1;
+        var routines, session_1, e_1, agendamentos_1, lastSchedule, _loop_1, _i, routines_1, routine, e_2;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, getStudentRoutines(student.ref)];
                 case 1:
                     routines = _a.sent();
-                    if (!Array.isArray(routines)) return [3 /*break*/, 8];
-                    return [4 /*yield*/, getLoginSessionID(student.matricula, student.password)];
+                    if (!Array.isArray(routines)) return [3 /*break*/, 11];
+                    _a.label = 2;
                 case 2:
+                    _a.trys.push([2, 4, , 5]);
+                    return [4 /*yield*/, getLoginSessionID(student.matricula, student.password)];
+                case 3:
                     session_1 = _a.sent();
-                    if (!(session_1 !== false && isValidSession(session_1))) return [3 /*break*/, 7];
+                    return [3 /*break*/, 5];
+                case 4:
+                    e_1 = _a.sent();
+                    log.error(e_1);
+                    return [3 /*break*/, 5];
+                case 5:
+                    if (!(session_1 !== false && isValidSession(session_1))) return [3 /*break*/, 10];
                     agendamentos_1 = [];
                     lastSchedule = void 0;
                     _loop_1 = function (routine) {
@@ -426,27 +441,41 @@ function startScheduleForStudent(student) {
                         routine = routines_1[_i];
                         _loop_1(routine);
                     }
-                    _a.label = 3;
-                case 3:
-                    _a.trys.push([3, 5, , 6]);
+                    _a.label = 6;
+                case 6:
+                    _a.trys.push([6, 8, , 9]);
                     return [4 /*yield*/, db.doc(student.ref).update({
                             lastSchedule: lastSchedule.toDate()
                         })];
-                case 4:
+                case 7:
                     _a.sent();
-                    return [3 /*break*/, 6];
-                case 5:
-                    e_1 = _a.sent();
-                    console.log('Error', e_1);
-                    return [3 /*break*/, 6];
-                case 6: return [2 /*return*/, Promise.all(agendamentos_1)];
-                case 7: return [3 /*break*/, 9];
+                    return [3 /*break*/, 9];
                 case 8:
-                    console.log("getStudentRoutines returned false");
+                    e_2 = _a.sent();
+                    log.error(e_2);
+                    return [3 /*break*/, 9];
+                case 9: return [2 /*return*/, Promise.all(agendamentos_1)];
+                case 10: return [3 /*break*/, 12];
+                case 11:
+                    log.error("getStudentRoutines returned false");
                     return [2 /*return*/, null];
-                case 9: return [2 /*return*/];
+                case 12: return [2 /*return*/];
             }
         });
+    });
+}
+function saveError(studentRef, schedule) {
+    delete schedule.password;
+    delete schedule.session;
+    return db.collection('errors').add({
+        resolved: false,
+        estudante: studentRef,
+        schedule: schedule
+    })
+        .then(function () {
+        log.info('Erro salvo');
+    })["catch"](function (e) {
+        log.error("Erro ao salvar o erro " + e);
     });
 }
 function encrypt(text) {
@@ -498,4 +527,7 @@ function isUndefined(variable) {
 }
 function isLastIndex(pos, arrayCheck) {
     return arrayCheck.length === (pos + 1);
+}
+function isDevMode() {
+    return process.env.DEV === "true";
 }
