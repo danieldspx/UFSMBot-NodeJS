@@ -129,6 +129,46 @@ app.get('/api/agendamento', (req, res) => {
   })
 })
 
+app.get('/api/errors/replay', (req, res) => {
+  getScheduleErrors(100)
+  .then(async (schedulesWrap: any) => {
+    if(Array.isArray(schedulesWrap)){
+      let allSchedules = [];
+      for (let scheduleWrap of schedulesWrap) {
+        let schedule = {...scheduleWrap};
+        let session;
+        const studentRef = schedule.ref;
+        delete schedule.ref;
+        try {
+          session = await getLoginSessionID(schedule.matricula, schedule.password);
+        } catch(e) {
+          session = false;
+          log.error(e.message);
+        }
+        if(session !== false && isValidSession(<string>session)){
+          schedule.session = session;
+          allSchedules.push(
+            executeFlowAgendamento(schedule, studentRef, true)
+          )
+        }
+      }
+      return Promise.all(allSchedules);
+    } else {
+      throw new Error('error when in fetch students for mass schedule')
+    }
+  })
+  .then(() => {
+    res.send({
+      message: 'mass schedule executed successfully'
+    })
+  })
+  .catch((error) => {
+    res.status(400).send({
+      message: error
+    });
+  })
+})
+
 function callAngularApp(req, res) {
   res.sendFile('public/index.html', {root: __dirname })
 }
@@ -184,7 +224,7 @@ async function getLoginSessionID(matricula: string, password: string): Promise<s
       log.info(`Login realizado ${matricula}`);
       return response.url.split(';')[1].replace("jsessionid=", "JSESSIONID=");
     }
-    throw new Error('login failed');
+    throw new Error(`Login falhou - ${matricula}`);
   })
 }
 
@@ -254,7 +294,7 @@ async function getStudentByMatricula(matricula: string, password: string){
   return db.collection('estudantes')
   .where('matricula', '==', matricula)
   .get()
-  .then((querySnapshot) => {
+  .then(async (querySnapshot) => {
     if(querySnapshot.size !== 0){
       let studentRef: DocumentReference;
       querySnapshot.forEach((doc) => {
@@ -318,6 +358,39 @@ async function getStudentsRef(limit: number, offset: number): Promise<StudentWra
   })
 }
 
+async function getScheduleErrors(limit: number){
+  let schedulesWrap = [];
+  let errors = [];
+  return db.collection('errors')
+  .where('resolved', '==', false)
+  .limit(limit)
+  .get()
+  .then((querySnapshot) => {
+    querySnapshot.forEach((doc) => {
+      errors.push({...doc.data(), ref: doc.ref.path});
+    })
+  })
+  .then(() => {
+    let all = [];
+    for (let error of errors) {
+      error.schedule.password = decrypt(error.schedule.password);
+      schedulesWrap.push({...error.schedule, ref: error.estudante});
+      db.doc(error.ref).delete()
+      .catch(() => {
+        log.error(`Couldnt delete the error in DB - ${error.ref}`);
+      })
+    }
+    return Promise.all(all);
+  })
+  .then(() => {
+    return schedulesWrap;
+  })
+  .catch((e) => {
+    log.error(e);
+    return false;
+  })
+}
+
 async function getStudentRoutines(ref: string): Promise<RoutineWrapper[] | boolean>{
   return db.collection(`${ref}/rotinas`)
   .get()
@@ -341,7 +414,8 @@ async function startScheduleForStudent(student: StudentWrapper): Promise<void[]>
     try {
       session = await getLoginSessionID(student.matricula, student.password);
     } catch(e) {
-      log.error(e);
+      session = false;
+      log.error(e.message);
     }
     if(session !== false && isValidSession(<string>session)){
       let agendamentos: Promise<void>[] = [];
@@ -383,20 +457,20 @@ async function startScheduleForStudent(student: StudentWrapper): Promise<void[]>
   }
 }
 
-function saveError(studentRef: string, schedule: Schedule){
-  delete schedule.password;
+async function saveError(studentRef: string, schedule: Schedule){
   delete schedule.session;
-  return db.collection('errors').add({
-    resolved: false,
-    estudante: studentRef,
-    schedule: schedule
-  })
-  .then(() => {
+  schedule.password = encrypt(schedule.password);
+  try {
+    await db.collection('errors').add({
+      resolved: false,
+      estudante: studentRef,
+      schedule: schedule
+    });
     log.info('Erro salvo');
-  })
-  .catch((e) => {
+  }
+  catch (e) {
     log.error(`Erro ao salvar o erro ${e}`);
-  })
+  }
 }
 
 function encrypt(text: string){

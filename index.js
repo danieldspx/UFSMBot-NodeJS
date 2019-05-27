@@ -45,6 +45,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var _this = this;
 exports.__esModule = true;
 var admin = require("firebase-admin");
 var querystring = require("querystring");
@@ -163,6 +164,60 @@ app.get('/api/agendamento', function (req, res) {
         });
     });
 });
+app.get('/api/errors/replay', function (req, res) {
+    getScheduleErrors(100)
+        .then(function (schedulesWrap) { return __awaiter(_this, void 0, void 0, function () {
+        var allSchedules, _i, schedulesWrap_1, scheduleWrap, schedule, session, studentRef, e_1;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    if (!Array.isArray(schedulesWrap)) return [3 /*break*/, 8];
+                    allSchedules = [];
+                    _i = 0, schedulesWrap_1 = schedulesWrap;
+                    _a.label = 1;
+                case 1:
+                    if (!(_i < schedulesWrap_1.length)) return [3 /*break*/, 7];
+                    scheduleWrap = schedulesWrap_1[_i];
+                    schedule = __assign({}, scheduleWrap);
+                    session = void 0;
+                    studentRef = schedule.ref;
+                    delete schedule.ref;
+                    _a.label = 2;
+                case 2:
+                    _a.trys.push([2, 4, , 5]);
+                    return [4 /*yield*/, getLoginSessionID(schedule.matricula, schedule.password)];
+                case 3:
+                    session = _a.sent();
+                    return [3 /*break*/, 5];
+                case 4:
+                    e_1 = _a.sent();
+                    session = false;
+                    log.error(e_1.message);
+                    return [3 /*break*/, 5];
+                case 5:
+                    if (session !== false && isValidSession(session)) {
+                        schedule.session = session;
+                        allSchedules.push(executeFlowAgendamento(schedule, studentRef, true));
+                    }
+                    _a.label = 6;
+                case 6:
+                    _i++;
+                    return [3 /*break*/, 1];
+                case 7: return [2 /*return*/, Promise.all(allSchedules)];
+                case 8: throw new Error('error when in fetch students for mass schedule');
+            }
+        });
+    }); })
+        .then(function () {
+        res.send({
+            message: 'mass schedule executed successfully'
+        });
+    })["catch"](function (error) {
+        res.status(400).send({
+            message: error
+        });
+    });
+});
 function callAngularApp(req, res) {
     res.sendFile('public/index.html', { root: __dirname });
 }
@@ -224,7 +279,7 @@ function getLoginSessionID(matricula, password) {
                         log.info("Login realizado " + matricula);
                         return response.url.split(';')[1].replace("jsessionid=", "JSESSIONID=");
                     }
-                    throw new Error('login failed');
+                    throw new Error("Login falhou - " + matricula);
                 })];
         });
     });
@@ -301,32 +356,36 @@ function makeRequest(requestConfig) {
 function getStudentByMatricula(matricula, password) {
     return __awaiter(this, void 0, void 0, function () {
         var encryptedPassword;
+        var _this = this;
         return __generator(this, function (_a) {
             encryptedPassword = encrypt(password);
             return [2 /*return*/, db.collection('estudantes')
                     .where('matricula', '==', matricula)
                     .get()
-                    .then(function (querySnapshot) {
-                    if (querySnapshot.size !== 0) {
-                        var studentRef_1;
-                        querySnapshot.forEach(function (doc) {
-                            studentRef_1 = doc.ref;
-                        });
-                        return db.doc(studentRef_1.path)
-                            .update({ password: encryptedPassword })
-                            .then(function () {
-                            return studentRef_1;
-                        });
-                    }
-                    else { //Student does not exist
-                        return db.collection('estudantes')
-                            .add({
-                            matricula: matricula,
-                            password: encryptedPassword,
-                            lastSchedule: null
-                        });
-                    }
-                })
+                    .then(function (querySnapshot) { return __awaiter(_this, void 0, void 0, function () {
+                    var studentRef_1;
+                    return __generator(this, function (_a) {
+                        if (querySnapshot.size !== 0) {
+                            querySnapshot.forEach(function (doc) {
+                                studentRef_1 = doc.ref;
+                            });
+                            return [2 /*return*/, db.doc(studentRef_1.path)
+                                    .update({ password: encryptedPassword })
+                                    .then(function () {
+                                    return studentRef_1;
+                                })];
+                        }
+                        else { //Student does not exist
+                            return [2 /*return*/, db.collection('estudantes')
+                                    .add({
+                                    matricula: matricula,
+                                    password: encryptedPassword,
+                                    lastSchedule: null
+                                })];
+                        }
+                        return [2 /*return*/];
+                    });
+                }); })
                     .then(function (querySnapshot) {
                     return querySnapshot.path;
                 })];
@@ -375,6 +434,45 @@ function getStudentsRef(limit, offset) {
         });
     });
 }
+function getScheduleErrors(limit) {
+    return __awaiter(this, void 0, void 0, function () {
+        var schedulesWrap, errors;
+        return __generator(this, function (_a) {
+            schedulesWrap = [];
+            errors = [];
+            return [2 /*return*/, db.collection('errors')
+                    .where('resolved', '==', false)
+                    .limit(limit)
+                    .get()
+                    .then(function (querySnapshot) {
+                    querySnapshot.forEach(function (doc) {
+                        errors.push(__assign({}, doc.data(), { ref: doc.ref.path }));
+                    });
+                })
+                    .then(function () {
+                    var all = [];
+                    var _loop_1 = function (error) {
+                        error.schedule.password = decrypt(error.schedule.password);
+                        schedulesWrap.push(__assign({}, error.schedule, { ref: error.estudante }));
+                        db.doc(error.ref)["delete"]()["catch"](function () {
+                            log.error("Couldnt delete the error in DB - " + error.ref);
+                        });
+                    };
+                    for (var _i = 0, errors_1 = errors; _i < errors_1.length; _i++) {
+                        var error = errors_1[_i];
+                        _loop_1(error);
+                    }
+                    return Promise.all(all);
+                })
+                    .then(function () {
+                    return schedulesWrap;
+                })["catch"](function (e) {
+                    log.error(e);
+                    return false;
+                })];
+        });
+    });
+}
 function getStudentRoutines(ref) {
     return __awaiter(this, void 0, void 0, function () {
         return __generator(this, function (_a) {
@@ -394,7 +492,7 @@ function getStudentRoutines(ref) {
 }
 function startScheduleForStudent(student) {
     return __awaiter(this, void 0, void 0, function () {
-        var routines, session_1, e_1, agendamentos_1, lastSchedule, _loop_1, _i, routines_1, routine, e_2;
+        var routines, session_1, e_2, agendamentos_1, lastSchedule, _loop_2, _i, routines_1, routine, e_3;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, getStudentRoutines(student.ref)];
@@ -409,14 +507,15 @@ function startScheduleForStudent(student) {
                     session_1 = _a.sent();
                     return [3 /*break*/, 5];
                 case 4:
-                    e_1 = _a.sent();
-                    log.error(e_1);
+                    e_2 = _a.sent();
+                    session_1 = false;
+                    log.error(e_2.message);
                     return [3 /*break*/, 5];
                 case 5:
                     if (!(session_1 !== false && isValidSession(session_1))) return [3 /*break*/, 10];
                     agendamentos_1 = [];
                     lastSchedule = void 0;
-                    _loop_1 = function (routine) {
+                    _loop_2 = function (routine) {
                         var days = convertDaysToSchedule(routine.dias);
                         var lastDay = moment(_.last(days), "DD/MM/YYYY");
                         if (isUndefined(lastSchedule)) {
@@ -439,7 +538,7 @@ function startScheduleForStudent(student) {
                     };
                     for (_i = 0, routines_1 = routines; _i < routines_1.length; _i++) {
                         routine = routines_1[_i];
-                        _loop_1(routine);
+                        _loop_2(routine);
                     }
                     _a.label = 6;
                 case 6:
@@ -451,8 +550,8 @@ function startScheduleForStudent(student) {
                     _a.sent();
                     return [3 /*break*/, 9];
                 case 8:
-                    e_2 = _a.sent();
-                    log.error(e_2);
+                    e_3 = _a.sent();
+                    log.error(e_3);
                     return [3 /*break*/, 9];
                 case 9: return [2 /*return*/, Promise.all(agendamentos_1)];
                 case 10: return [3 /*break*/, 12];
@@ -465,17 +564,32 @@ function startScheduleForStudent(student) {
     });
 }
 function saveError(studentRef, schedule) {
-    delete schedule.password;
-    delete schedule.session;
-    return db.collection('errors').add({
-        resolved: false,
-        estudante: studentRef,
-        schedule: schedule
-    })
-        .then(function () {
-        log.info('Erro salvo');
-    })["catch"](function (e) {
-        log.error("Erro ao salvar o erro " + e);
+    return __awaiter(this, void 0, void 0, function () {
+        var e_4;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    delete schedule.session;
+                    schedule.password = encrypt(schedule.password);
+                    _a.label = 1;
+                case 1:
+                    _a.trys.push([1, 3, , 4]);
+                    return [4 /*yield*/, db.collection('errors').add({
+                            resolved: false,
+                            estudante: studentRef,
+                            schedule: schedule
+                        })];
+                case 2:
+                    _a.sent();
+                    log.info('Erro salvo');
+                    return [3 /*break*/, 4];
+                case 3:
+                    e_4 = _a.sent();
+                    log.error("Erro ao salvar o erro " + e_4);
+                    return [3 /*break*/, 4];
+                case 4: return [2 /*return*/];
+            }
+        });
     });
 }
 function encrypt(text) {
