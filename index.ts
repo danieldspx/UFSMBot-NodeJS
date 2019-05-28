@@ -38,6 +38,7 @@ app.listen(PORT, () => {
 app.get('/', callAngularApp);
 app.get('/login', callAngularApp);
 app.get('/home', callAngularApp);
+app.get('/account', callAngularApp);
 
 app.post('/auth/login', (req, res) => {
   let currentSession: string;
@@ -50,6 +51,21 @@ app.post('/auth/login', (req, res) => {
         return getStudentByMatricula(matricula, password);
       }
     }
+  })
+  .then(async (studentUID) => {
+    let updateData = {
+      lastLogin: moment().toDate()
+    };
+    const studentInfo = await getStudentNameAndCourse(matricula, currentSession);
+    if(studentInfo !== false){
+      updateData = {...updateData, ...studentInfo};
+    }
+    db.doc(studentUID)
+    .update(updateData)
+    .catch((error) => {
+      log.error(`Error on update user data on login. Error message: ${error}`);
+    })
+    return studentUID;
   })
   .then((studentUID) => {
     return admin.auth()
@@ -103,6 +119,9 @@ app.post('/api/agendar', (req, res) => {
 })
 
 app.get('/api/agendamento', (req, res) => {
+  res.send({
+    message: 'mass schedule started successfully...'
+  });
   getStudentsRef(100,0)
   .then((studentsWrapper) => {
     if(Array.isArray(studentsWrapper)){
@@ -118,18 +137,17 @@ app.get('/api/agendamento', (req, res) => {
     }
   })
   .then(() => {
-    res.send({
-      message: 'mass schedule executed successfully'
-    })
+    log.info('mass schedule finished successfully')
   })
   .catch((error) => {
-    res.status(400).send({
-      message: error
-    });
-  })
+    log.error(`Error on mass schedule: ${error}`);
+  });
 })
 
 app.get('/api/errors/replay', (req, res) => {
+  res.send({
+    message: 'mass schedule started successfully...'
+  })
   getScheduleErrors(100)
   .then(async (schedulesWrap: any) => {
     if(Array.isArray(schedulesWrap)){
@@ -158,14 +176,10 @@ app.get('/api/errors/replay', (req, res) => {
     }
   })
   .then(() => {
-    res.send({
-      message: 'mass schedule executed successfully'
-    })
+    log.info('Error replay executed successfully.')
   })
   .catch((error) => {
-    res.status(400).send({
-      message: error
-    });
+    log.error(`Error replay not successfull. Error message: ${error}`)
   })
 })
 
@@ -471,6 +485,37 @@ async function saveError(studentRef: string, schedule: Schedule){
   catch (e) {
     log.error(`Erro ao salvar o erro ${e}`);
   }
+}
+
+async function getStudentNameAndCourse(matricula: string, session: string): Promise<boolean | any>{
+  const headers = [['Cookie', session]];
+  const requestConfig: RequestConfig = {//It is igly but it is the only way
+    headers: headers,
+    body: `callCount=1\npage=/ru/usuario/transferencia/credito/form.html\nhttpSessionId=7caf08d8244959875a34e1758d0b\nscriptSessionId=5000E7D9FF69206B62CD4E56F325D285348\nc0-scriptName=usuarioRuCaptchaAjaxService\nc0-methodName=search\nc0-id=0\nc0-param0=number:0\nc0-param1=number:10\nc0-e1=string:${matricula}\nc0-e2=string:sono\nc0-e3=null:null\nc0-e4=null:null\nc0-param2=Object_Object:{matricula:reference:c0-e1, captcha:reference:c0-e2, orderBy:reference:c0-e3, orderMode:reference:c0-e4}\nbatchId=7\n`,
+    referrer: 'https://portal.ufsm.br/ru/usuario/transferencia/credito/form.html',
+    url: 'https://portal.ufsm.br/ru/dwr/call/plaincall/usuarioRuCaptchaAjaxService.search.dwr'
+  };
+  return makeRequest(requestConfig)
+  .then((response) => {
+    return response.text()
+  })
+  .then((data) => {
+    let info = {
+      nome: data.match(/s0.nome="(?:.*)"/i)[0].slice(9).replace('"', ''),
+      curso: data.match(/s5.nome="(?:.*)"/i)[0].slice(9).replace('"', '')
+    };
+    info.nome = unscapeUnicode(info.nome);
+    info.curso = unscapeUnicode(info.curso);
+    return info;
+  })
+  .catch((error) => {
+    log.error(`Error when fetching data from the user. Error message: ${error}`);
+    return false;
+  });
+}
+
+function unscapeUnicode(text){
+  return decodeURIComponent(JSON.parse(`"${text}"`));
 }
 
 function encrypt(text: string){
