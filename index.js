@@ -64,7 +64,7 @@ var PORT = process.env.PORT || 5000;
 //Initialization
 var serviceAccount = require("./config/serviceAccountKey.json");
 var log = NodeLogger.createSimpleLogger({
-    logFilePath: 'ufsmbot.log',
+    logFilePath: './ufsmbot.log',
     timestampFormat: 'DD-MM-YYYY HH:mm:ss'
 });
 admin.initializeApp({
