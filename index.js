@@ -82,7 +82,7 @@ app.get('/home', callAngularApp);
 app.get('/account', callAngularApp);
 app.post('/auth/login', function (req, res) {
     var currentSession;
-    var _a = req.body, matricula = _a.matricula, password = _a.password;
+    var _a = req.body, matricula = _a.matricula, password = _a.password, hasAcceptedTerm = _a.hasAcceptedTerm;
     getLoginSessionID(matricula, password)
         .then(function (session) {
         if (session !== false) {
@@ -98,7 +98,8 @@ app.post('/auth/login', function (req, res) {
             switch (_a.label) {
                 case 0:
                     updateData = {
-                        lastLogin: moment().toDate()
+                        lastLogin: moment().toDate(),
+                        agreementAccepted: hasAcceptedTerm
                     };
                     return [4 /*yield*/, getStudentNameAndCourse(matricula, currentSession)];
                 case 1:
@@ -123,16 +124,22 @@ app.post('/auth/login', function (req, res) {
             message: 'sucess',
             token: token
         });
-    })["catch"](function (e) {
-        res.status(403).send({
-            message: 'login attemp failed',
-            error: e
-        });
+    })["catch"](function (errorStatus) {
+        if (errorStatus.message == 200) { //It returns 200 even if you have the wrong credentials
+            res.status(403).send({
+                message: 'login attemp failed'
+            });
+        }
+        else { //Show when the UFSM server is down or something
+            res.status(502).send({
+                message: 'invalid response from an upstream server'
+            });
+        }
     })["finally"](function () {
         if (!isUndefined(currentSession) && isValidSession(currentSession)) {
             logOut(currentSession)
                 .then(function (response) {
-                if (response.status === 200) {
+                if (response.status == 200) {
                     log.info("Logout realizado " + currentSession);
                 }
                 else {
@@ -300,7 +307,8 @@ function getLoginSessionID(matricula, password) {
                         log.info("Login realizado " + matricula);
                         return response.url.split(';')[1].replace("jsessionid=", "JSESSIONID=");
                     }
-                    throw new Error("Login falhou - " + matricula);
+                    log.error("Login falhou - " + matricula);
+                    throw new Error(response.status);
                 })];
         });
     });
@@ -535,7 +543,7 @@ function startScheduleForStudent(student) {
                 case 5:
                     if (!(session_1 !== false && isValidSession(session_1))) return [3 /*break*/, 10];
                     agendamentos_1 = [];
-                    lastSchedule = void 0;
+                    lastSchedule = moment();
                     _loop_2 = function (routine) {
                         var days = convertDaysToSchedule(routine.dias);
                         var lastDay = moment(_.last(days), "DD/MM/YYYY");
@@ -699,3 +707,9 @@ function isLastIndex(pos, arrayCheck) {
 function isDevMode() {
     return process.env.DEV === "true";
 }
+function countTotalUsers() {
+    db.collection('estudantes').get().then(function (querySnapshot) {
+        console.log('Total alunos: ' + querySnapshot.size);
+    });
+}
+countTotalUsers();

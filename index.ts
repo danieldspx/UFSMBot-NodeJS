@@ -42,7 +42,7 @@ app.get('/account', callAngularApp);
 
 app.post('/auth/login', (req, res) => {
   let currentSession: string;
-  const {matricula , password} = req.body;
+  const {matricula , password, hasAcceptedTerm} = req.body;
   getLoginSessionID(matricula, password)
   .then((session: string | boolean) => {
     if(session !== false){
@@ -54,7 +54,8 @@ app.post('/auth/login', (req, res) => {
   })
   .then(async (studentUID) => {
     let updateData = {
-      lastLogin: moment().toDate()
+      lastLogin: moment().toDate(),
+      agreementAccepted: hasAcceptedTerm
     };
     const studentInfo = await getStudentNameAndCourse(matricula, currentSession);
     if(studentInfo !== false){
@@ -77,17 +78,22 @@ app.post('/auth/login', (req, res) => {
       token: token
     })
   })
-  .catch((e) => {
-    res.status(403).send({
-      message: 'login attemp failed',
-      error: e
-    })
+  .catch((errorStatus) => {
+    if(errorStatus.message == 200){//It returns 200 even if you have the wrong credentials
+      res.status(403).send({
+        message: 'login attemp failed'
+      })
+    } else {//Show when the UFSM server is down or something
+      res.status(502).send({
+        message: 'invalid response from an upstream server'
+      })
+    }
   })
   .finally(() => {
     if(!isUndefined(currentSession) && isValidSession(currentSession)){
       logOut(currentSession)
       .then((response: any) => {
-        if(response.status === 200){
+        if(response.status == 200){
           log.info(`Logout realizado ${currentSession}`);
         } else {
           log.error(`Erro ao fazer logout ${currentSession}`);
@@ -238,7 +244,8 @@ async function getLoginSessionID(matricula: string, password: string): Promise<s
       log.info(`Login realizado ${matricula}`);
       return response.url.split(';')[1].replace("jsessionid=", "JSESSIONID=");
     }
-    throw new Error(`Login falhou - ${matricula}`);
+    log.error(`Login falhou - ${matricula}`);
+    throw new Error(response.status);
   })
 }
 
@@ -433,7 +440,7 @@ async function startScheduleForStudent(student: StudentWrapper): Promise<void[]>
     }
     if(session !== false && isValidSession(<string>session)){
       let agendamentos: Promise<void>[] = [];
-      let lastSchedule: Moment;
+      let lastSchedule: Moment = moment();
       for (let routine of routines) {
         const days = convertDaysToSchedule(routine.dias);
         const lastDay = moment(_.last(days), "DD/MM/YYYY");
@@ -584,3 +591,11 @@ function isLastIndex(pos, arrayCheck){
 function isDevMode(): boolean{
   return process.env.DEV === "true";
 }
+
+function countTotalUsers(){
+  db.collection('estudantes').get().then((querySnapshot) => {
+    console.log('Total alunos: '+querySnapshot.size);
+  });
+}
+
+countTotalUsers();
