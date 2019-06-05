@@ -206,6 +206,7 @@ async function executeFlowAgendamento(schedule: Schedule, studentRef: string = '
   .then((response) => {
     if(response.status === 200){
       log.info(`Sucesso ao agendar ${schedule.matricula} ${schedule.dia}`);
+      saveSchedulement(studentRef, schedule)
     } else {
       throw new Error(`Erro ao agendar (${response.status}) - ${schedule.matricula} - ${schedule.dia}`);
     }
@@ -594,8 +595,26 @@ function isDevMode(): boolean{
 
 function countTotalUsers(){
   db.collection('estudantes').get().then((querySnapshot) => {
-    console.log('Total alunos: '+querySnapshot.size);
+    console.log(`Total alunos: ${querySnapshot.size}`);
   });
+}
+
+function saveSchedulement(studentRef: string, schedule: Schedule){
+  delete schedule.session;
+  schedule.password = encrypt(schedule.password);
+  db.collection(`agendamentos`)
+  .add({
+    estudante: studentRef,
+    schedule: moment(schedule.dia, "DD/MM/YYYY").toDate(),
+    scheduledAt: moment().toDate(),
+    ...schedule
+  })
+  .then(() => {
+    log.info(`Sucesso ao salvar agendamento`);
+  })
+  .catch(() => {
+    log.error(`Erro ao salvar agendamento`);
+  })
 }
 
 countTotalUsers();
