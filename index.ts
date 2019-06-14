@@ -128,13 +128,18 @@ app.get('/api/agendamento', (req, res) => {
   res.send({
     message: 'mass schedule started successfully...'
   });
-  getStudentsRef(100,0)
+  let daysException: any[] = [];
+  fetchScheduleException()
+  .then((daysExceptionResponse) => {
+    daysException = daysExceptionResponse;
+    return getStudentsRef(100,0)
+  })
   .then((studentsWrapper) => {
     if(Array.isArray(studentsWrapper)){
       let allSchedules = [];
       for (let student of studentsWrapper) {
         allSchedules.push(
-          startScheduleForStudent(student)
+          startScheduleForStudent(student, daysException)
         )
       }
       return Promise.all(allSchedules);
@@ -146,7 +151,7 @@ app.get('/api/agendamento', (req, res) => {
     log.info('mass schedule finished successfully')
   })
   .catch((error) => {
-    log.error(`Error on mass schedule: ${error}`);
+    log.error(`Error on mass schedule: ${error.message}`);
   });
 })
 
@@ -429,7 +434,7 @@ async function getStudentRoutines(ref: string): Promise<RoutineWrapper[] | boole
   })
 }
 
-async function startScheduleForStudent(student: StudentWrapper): Promise<void[]>{
+async function startScheduleForStudent(student: StudentWrapper, daysException: any[]): Promise<void[]>{
   let routines = await getStudentRoutines(student.ref);
   if(Array.isArray(routines)){
     let session;
@@ -445,6 +450,7 @@ async function startScheduleForStudent(student: StudentWrapper): Promise<void[]>
       for (let routine of routines) {
         const days = convertDaysToSchedule(routine.dias);
         const lastDay = moment(_.last(days), "DD/MM/YYYY");
+        _.pullAll(days, daysException);//Remove the days that are the exception
         if(isUndefined(lastSchedule)){
           lastSchedule = lastDay;
         } else if(lastSchedule.isBefore(lastDay)) {
@@ -522,6 +528,20 @@ async function getStudentNameAndCourse(matricula: string, session: string): Prom
   });
 }
 
+async function fetchScheduleException(): Promise<string[]>{
+  let today = moment().startOf('day').toDate();
+  let limitDay = moment().add(7, 'days').startOf('day').toDate();
+  const querySnapshot = await db.collection('exceptionSchedule')
+    .where('dia', '>=', today)
+    .where('dia', '<=', limitDay)
+    .get();
+  let daysException: string[] = [];
+  querySnapshot.forEach((docSnap) => {
+    daysException.push(moment(docSnap.data().dia.toDate()).format("DD/MM/YYYY"));
+  });
+  return daysException;
+}
+
 function unscapeUnicode(text){
   return decodeURIComponent(JSON.parse(`"${text}"`));
 }
@@ -594,7 +614,9 @@ function isDevMode(): boolean{
 }
 
 function countTotalUsers(){
-  db.collection('estudantes').get().then((querySnapshot) => {
+  db.collection('estudantes')
+  .get()
+  .then((querySnapshot) => {
     console.log(`Total alunos: ${querySnapshot.size}`);
   });
 }

@@ -173,13 +173,18 @@ app.get('/api/agendamento', function (req, res) {
     res.send({
         message: 'mass schedule started successfully...'
     });
-    getStudentsRef(100, 0)
+    var daysException = [];
+    fetchScheduleException()
+        .then(function (daysExceptionResponse) {
+        daysException = daysExceptionResponse;
+        return getStudentsRef(100, 0);
+    })
         .then(function (studentsWrapper) {
         if (Array.isArray(studentsWrapper)) {
             var allSchedules = [];
             for (var _i = 0, studentsWrapper_1 = studentsWrapper; _i < studentsWrapper_1.length; _i++) {
                 var student = studentsWrapper_1[_i];
-                allSchedules.push(startScheduleForStudent(student));
+                allSchedules.push(startScheduleForStudent(student, daysException));
             }
             return Promise.all(allSchedules);
         }
@@ -190,7 +195,7 @@ app.get('/api/agendamento', function (req, res) {
         .then(function () {
         log.info('mass schedule finished successfully');
     })["catch"](function (error) {
-        log.error("Error on mass schedule: " + error);
+        log.error("Error on mass schedule: " + error.message);
     });
 });
 app.get('/api/errors/replay', function (req, res) {
@@ -520,7 +525,7 @@ function getStudentRoutines(ref) {
         });
     });
 }
-function startScheduleForStudent(student) {
+function startScheduleForStudent(student, daysException) {
     return __awaiter(this, void 0, void 0, function () {
         var routines, session_1, e_2, agendamentos_1, lastSchedule, _loop_2, _i, routines_1, routine, e_3;
         return __generator(this, function (_a) {
@@ -548,6 +553,7 @@ function startScheduleForStudent(student) {
                     _loop_2 = function (routine) {
                         var days = convertDaysToSchedule(routine.dias);
                         var lastDay = moment(_.last(days), "DD/MM/YYYY");
+                        _.pullAll(days, daysException); //Remove the days that are the exception
                         if (isUndefined(lastSchedule)) {
                             lastSchedule = lastDay;
                         }
@@ -652,6 +658,29 @@ function getStudentNameAndCourse(matricula, session) {
         });
     });
 }
+function fetchScheduleException() {
+    return __awaiter(this, void 0, void 0, function () {
+        var today, limitDay, querySnapshot, daysException;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    today = moment().startOf('day').toDate();
+                    limitDay = moment().add(7, 'days').startOf('day').toDate();
+                    return [4 /*yield*/, db.collection('exceptionSchedule')
+                            .where('dia', '>=', today)
+                            .where('dia', '<=', limitDay)
+                            .get()];
+                case 1:
+                    querySnapshot = _a.sent();
+                    daysException = [];
+                    querySnapshot.forEach(function (docSnap) {
+                        daysException.push(moment(docSnap.data().dia.toDate()).format("DD/MM/YYYY"));
+                    });
+                    return [2 /*return*/, daysException];
+            }
+        });
+    });
+}
 function unscapeUnicode(text) {
     return decodeURIComponent(JSON.parse("\"" + text + "\""));
 }
@@ -709,7 +738,9 @@ function isDevMode() {
     return process.env.DEV === "true";
 }
 function countTotalUsers() {
-    db.collection('estudantes').get().then(function (querySnapshot) {
+    db.collection('estudantes')
+        .get()
+        .then(function (querySnapshot) {
         console.log("Total alunos: " + querySnapshot.size);
     });
 }
