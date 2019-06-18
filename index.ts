@@ -14,6 +14,7 @@ import { RequestConfig } from './interfaces/request-config';
 import { Schedule } from './interfaces/schedule';
 import { StudentWrapper } from './interfaces/student-wrapper';
 import { RoutineWrapper } from './interfaces/routine-wrapper';
+import { HistoryCheck } from './interfaces/history-check';
 import { DocumentReference } from '@google-cloud/firestore';
 import { Moment } from 'moment';
 //Const variables
@@ -194,6 +195,43 @@ app.get('/api/errors/replay', (req, res) => {
   })
 })
 
+app.get('/api/history-check', (req, res) => {
+  res.send({
+    message: 'history check started successfully...'
+  })
+  log.info('History check started successfully.')
+  getStudentsHistoryCheck(300)
+  .then(async (studentsHistoryCheck: HistoryCheck[]) => {
+    if(Array.isArray(studentsHistoryCheck)){
+      let allHistoryCheck = [];
+      for (let student of studentsHistoryCheck) {
+        let session;
+        try {
+          session = await getLoginSessionID(student.matricula, student.password);
+        } catch(e) {
+          session = false;
+          log.error(e.message);
+        }
+        if(session !== false && isValidSession(<string>session)){
+          student.session = session;
+          allHistoryCheck.push(
+            executeHistoryCheck(student)
+          )
+        }
+      }
+      return Promise.all(allHistoryCheck);
+    } else {
+      throw new Error('error when checking schedule history')
+    }
+  })
+  .then(() => {
+    log.info('History check executed successfully.')
+  })
+  .catch((error) => {
+    log.error(`Error replay not successfull. Error message: ${error}`)
+  })
+})
+
 function callAngularApp(req, res) {
   res.sendFile('public/index.html', {root: __dirname })
 }
@@ -337,7 +375,8 @@ async function getStudentByMatricula(matricula: string, password: string){
       .add({
         matricula: matricula,
         password: encryptedPassword,
-        lastSchedule: null
+        lastSchedule: null,
+        lastHistoryCheck: null
       })
     }
   })
@@ -387,17 +426,18 @@ async function getStudentsRef(limit: number, offset: number): Promise<StudentWra
 
 async function getScheduleErrors(limit: number){
   let schedulesWrap = [];
-  let errors = [];
   return db.collection('errors')
   .where('resolved', '==', false)
   .limit(limit)
   .get()
   .then((querySnapshot) => {
+    let errors = [];
     querySnapshot.forEach((doc) => {
       errors.push({...doc.data(), ref: doc.ref.path});
     })
+    return errors;
   })
-  .then(() => {
+  .then((errors) => {
     let all = [];
     for (let error of errors) {
       error.schedule.password = decrypt(error.schedule.password);
@@ -414,6 +454,55 @@ async function getScheduleErrors(limit: number){
   })
   .catch((e) => {
     log.error(e);
+    return false;
+  })
+}
+
+async function getStudentsHistoryCheck(limit: number): Promise<HistoryCheck[] | boolean>{
+  let studentsRef:HistoryCheck[] = [];
+  return db.collection('estudantes')
+  .where('lastHistoryCheck', '==', null)
+  .limit(limit)
+  .get()
+  .then((querySnapshot) => {
+    querySnapshot.forEach((doc) => {
+      const student = doc.data();
+
+      sanitizeHistoryCheckStudent(student);
+
+      studentsRef.push({
+        ref: doc.ref,
+        matricula: student.matricula,
+        password: decrypt(student.password),
+        banUntil: student.banUntil,
+        banCount: student.banCount,
+        lastHistoryCheck: student.lastHistoryCheck
+      });
+    })
+
+    return db.collection('estudantes')
+    .where('lastHistoryCheck','<',moment().subtract(7, 'days').toDate())
+    .limit(limit)
+    .get()
+  })
+  .then((querySnapshot) => {
+    querySnapshot.forEach((doc) => {
+      const student = doc.data();
+
+      sanitizeHistoryCheckStudent(student)
+
+      studentsRef.push({
+        ref: doc.ref,
+        matricula: student.matricula,
+        password: decrypt(student.password),
+        banUntil: student.banUntil,
+        banCount: student.banCount,
+        lastHistoryCheck: student.lastHistoryCheck
+      })
+    })
+    return studentsRef;
+  })
+  .catch(() => {
     return false;
   })
 }
@@ -542,6 +631,146 @@ async function fetchScheduleException(): Promise<string[]>{
   return daysException;
 }
 
+async function fetchHistorySchedulement(student: HistoryCheck){
+  const headers = [['Cookie', student.session]];
+
+  const twoDaysAgo = moment().subtract(2, 'days').format("DD/MM/YYYY");
+  const lastHistory = student.lastHistoryCheck.format("DD/MM/YYYY");
+
+  let bodyRequest = querystring.stringify({
+    'callCount': '1',
+    'nextReverseAjaxIndex': '0',
+    'c0-scriptName': 'agendamentoUsuarioAjaxTable',
+    'c0-methodName': 'search',
+    'c0-id': '0'
+  });
+
+  let bodyAppend = {
+    'c0-param0': 'number:0',
+    'c0-param1': 'number:20',
+    'c0-e1': `${querystring.escape(lastHistory)}`,
+    'c0-e2': `string:${querystring.escape(twoDaysAgo)}`,
+    'c0-e3': 'string:dataRefAgendada',
+    'c0-e4': 'string:desc',
+    'c0-param2': 'Object_Object:{inicio:reference:c0-e1, fim:reference:c0-e2, orderBy:reference:c0-e3, orderMode:reference:c0-e4}',
+    'batchId': 5,
+    'instanceId': 0,
+    'page': '/ru/usuario/agendamento/agendamento.html?action=list',
+    'scriptSessionId': ''
+  };
+
+  for (let key in bodyAppend) {
+      bodyRequest += `&${key}=${bodyAppend[key]}`;
+  }
+
+  const requestConfig: RequestConfig = {
+    body: bodyRequest,
+    headers: headers,
+    referrer: 'https://portal.ufsm.br/ru/usuario/agendamento/agendamento.html?action=list',
+    url: 'https://portal.ufsm.br/ru/dwr/call/plaincall/agendamentoUsuarioAjaxTable.search.dwr'
+  };
+
+  return makeRequest(requestConfig)
+  .then(response => response.text())
+  .then((responseTxt: string) => parseHistorySchedulement(responseTxt));
+}
+
+async function executeHistoryCheck(student: HistoryCheck){
+  return fetchHistorySchedulement(student)
+  .then(async (history) => {
+    let penalties: number = 0;
+    if(history.length != 0){
+      for (let day of history) {
+          const shouldAddPenalty = await wasScheduledByBot(student.matricula, day.format("DD/MM/YYYY"));
+          if(shouldAddPenalty){
+            console.log(`Add penalty ${student.matricula}`);
+            penalties++;
+          }
+      }
+    }
+    return penalties;
+  })
+  .then((penalties: number) => {
+    let updates: any = {
+      lastHistoryCheck: moment().subtract(2, 'days').toDate(),
+    };
+
+    if(penalties > 0){
+      student.banCount++
+      let banUntil = moment().add(7*penalties*(student.banCount*2), 'days').toDate();
+      updates = {
+        banCount: student.banCount,
+        banUntil: banUntil,
+        ...updates
+      };
+
+      log.info(`Ban applyed to ${student.matricula} until ${moment(banUntil).format('DD/MM')}`)
+    }
+
+    student.ref.update(updates);
+  })
+  .catch(() => {
+    log.error(`Error on execute history check for ${student.matricula}`);
+  })
+}
+
+async function wasScheduledByBot(matricula: string, dia: string): Promise<boolean>{
+  return db.collection('agendamentos')
+  .where('dia', '==', dia)
+  .where('matricula', '==', matricula)
+  .limit(1)
+  .get()
+  .then((querySnapshot) => {
+    return !querySnapshot.empty;
+  })
+  .catch(() => {
+    return false;
+  })
+}
+
+function sanitizeHistoryCheckStudent(student){
+  if(isUndefined(student.lastHistoryCheck) || student.lastHistoryCheck == null){
+    student.lastHistoryCheck = moment().subtract(7, 'days');
+  } else {
+    student.lastHistoryCheck = moment(student.lastHistoryCheck);
+  }
+
+  if(isUndefined(student.banUntil) || student.banUntil == null){
+    student.banUntil = moment();
+  } else {
+    student.banUntil = moment(student.banUntil);
+  }
+
+  if(isUndefined(student.banUntil) || student.banUntil == null){
+    student.banCount = 0;
+  }
+}
+
+function parseHistorySchedulement(historyTxt): any[]{
+  let statuses = historyTxt.match(/,comparecido(.*?),/g);
+  let datesRef = historyTxt.match(/,dataRefAgendada(.*?),/g);
+  let available = historyTxt.match(/,disponibilizado(.*?),/g);
+  let history = [];
+
+  try{
+    if(statuses == null){
+      statuses = [];
+    }
+    for(let i = 0; i < statuses.length; i++){
+      statuses[i] = statuses[i].replace(/,/g, '').substring(12);//`,comparecido:false,` => `false`
+      datesRef[i] = parseInt(datesRef[i].replace(/(,|\(|\))/g, '').substring(24));//`,dataRefAgendada:new Date(1559271600000),` => `1559271600000`
+      available[i] = available[i].replace(/,/g, '').substring(16);//`,disponibilizado:false,` => `false`
+      if(statuses[i] === 'false' && (available[i] === 'false' || available[i] === 'null')){//Nao compareceu e nao disponibilizou
+        history.push(moment(datesRef[i]).add(3, 'hours'));//Add 3 hours due to timezone
+      }
+    }
+  }catch(e){
+    log.error(`Error on parse HistorySchedule: ${e.message}`);
+  }
+
+  return history;
+}
+
 function unscapeUnicode(text){
   return decodeURIComponent(JSON.parse(`"${text}"`));
 }
@@ -618,6 +847,9 @@ function countTotalUsers(){
   .get()
   .then((querySnapshot) => {
     console.log(`Total alunos: ${querySnapshot.size}`);
+  })
+  .catch((e) => {
+    console.log(e);
   });
 }
 
@@ -632,11 +864,11 @@ function saveSchedulement(studentRef: string, schedule: Schedule){
     ...schedule
   })
   .then(() => {
-    log.info(`Sucesso ao salvar agendamento`);
+    log.info(`Sucesso ao salvar agendamento ${schedule.matricula}`);
   })
   .catch(() => {
-    log.error(`Erro ao salvar agendamento`);
+    log.error(`Erro ao salvar agendamento ${schedule.matricula}`);
   })
 }
 
-countTotalUsers();
+// countTotalUsers();

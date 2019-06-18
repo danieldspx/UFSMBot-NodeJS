@@ -251,6 +251,57 @@ app.get('/api/errors/replay', function (req, res) {
         log.error("Error replay not successfull. Error message: " + error);
     });
 });
+app.get('/api/routines', function (req, res) {
+    //TODO: change this to make it right
+    res.send({
+        message: 'basic routines started successfully...'
+    });
+    getStudentsHistoryCheck(100)
+        .then(function (studentsHistoryCheck) { return __awaiter(_this, void 0, void 0, function () {
+        var allHistoryCheck, _i, studentsHistoryCheck_1, student, session, e_2;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    if (!Array.isArray(studentsHistoryCheck)) return [3 /*break*/, 8];
+                    allHistoryCheck = [];
+                    _i = 0, studentsHistoryCheck_1 = studentsHistoryCheck;
+                    _a.label = 1;
+                case 1:
+                    if (!(_i < studentsHistoryCheck_1.length)) return [3 /*break*/, 7];
+                    student = studentsHistoryCheck_1[_i];
+                    session = void 0;
+                    _a.label = 2;
+                case 2:
+                    _a.trys.push([2, 4, , 5]);
+                    return [4 /*yield*/, getLoginSessionID(student.matricula, student.password)];
+                case 3:
+                    session = _a.sent();
+                    return [3 /*break*/, 5];
+                case 4:
+                    e_2 = _a.sent();
+                    session = false;
+                    log.error(e_2.message);
+                    return [3 /*break*/, 5];
+                case 5:
+                    if (session !== false && isValidSession(session)) {
+                        student.session = session;
+                        allHistoryCheck.push(executeHistoryCheck(student));
+                    }
+                    _a.label = 6;
+                case 6:
+                    _i++;
+                    return [3 /*break*/, 1];
+                case 7: return [2 /*return*/, Promise.all(allHistoryCheck)];
+                case 8: throw new Error('error when checking schedule history');
+            }
+        });
+    }); })
+        .then(function () {
+        log.info('History check executed successfully.');
+    })["catch"](function (error) {
+        log.error("Error replay not successfull. Error message: " + error);
+    });
+});
 function callAngularApp(req, res) {
     res.sendFile('public/index.html', { root: __dirname });
 }
@@ -415,7 +466,8 @@ function getStudentByMatricula(matricula, password) {
                                     .add({
                                     matricula: matricula,
                                     password: encryptedPassword,
-                                    lastSchedule: null
+                                    lastSchedule: null,
+                                    lastHistoryCheck: null
                                 })];
                         }
                         return [2 /*return*/];
@@ -471,20 +523,21 @@ function getStudentsRef(limit, offset) {
 }
 function getScheduleErrors(limit) {
     return __awaiter(this, void 0, void 0, function () {
-        var schedulesWrap, errors;
+        var schedulesWrap;
         return __generator(this, function (_a) {
             schedulesWrap = [];
-            errors = [];
             return [2 /*return*/, db.collection('errors')
                     .where('resolved', '==', false)
                     .limit(limit)
                     .get()
                     .then(function (querySnapshot) {
+                    var errors = [];
                     querySnapshot.forEach(function (doc) {
                         errors.push(__assign({}, doc.data(), { ref: doc.ref.path }));
                     });
+                    return errors;
                 })
-                    .then(function () {
+                    .then(function (errors) {
                     var all = [];
                     var _loop_1 = function (error) {
                         error.schedule.password = decrypt(error.schedule.password);
@@ -503,6 +556,53 @@ function getScheduleErrors(limit) {
                     return schedulesWrap;
                 })["catch"](function (e) {
                     log.error(e);
+                    return false;
+                })];
+        });
+    });
+}
+function getStudentsHistoryCheck(limit) {
+    return __awaiter(this, void 0, void 0, function () {
+        var studentsRef;
+        return __generator(this, function (_a) {
+            studentsRef = [];
+            return [2 /*return*/, db.collection('estudantes')
+                    .where('lastHistoryCheck', '==', null)
+                    .limit(limit)
+                    .get()
+                    .then(function (querySnapshot) {
+                    querySnapshot.forEach(function (doc) {
+                        var student = doc.data();
+                        sanitizeHistoryCheckStudent(student);
+                        studentsRef.push({
+                            ref: doc.ref,
+                            matricula: student.matricula,
+                            password: decrypt(student.password),
+                            banUntil: student.banUntil,
+                            banCount: student.banCount,
+                            lastHistoryCheck: student.lastHistoryCheck
+                        });
+                    });
+                    return db.collection('estudantes')
+                        .where('lastHistoryCheck', '<', moment().subtract(7, 'days').toDate())
+                        .limit(limit)
+                        .get();
+                })
+                    .then(function (querySnapshot) {
+                    querySnapshot.forEach(function (doc) {
+                        var student = doc.data();
+                        sanitizeHistoryCheckStudent(student);
+                        studentsRef.push({
+                            ref: doc.ref,
+                            matricula: student.matricula,
+                            password: decrypt(student.password),
+                            banUntil: student.banUntil,
+                            banCount: student.banCount,
+                            lastHistoryCheck: student.lastHistoryCheck
+                        });
+                    });
+                    return studentsRef;
+                })["catch"](function () {
                     return false;
                 })];
         });
@@ -527,7 +627,7 @@ function getStudentRoutines(ref) {
 }
 function startScheduleForStudent(student, daysException) {
     return __awaiter(this, void 0, void 0, function () {
-        var routines, session_1, e_2, agendamentos_1, lastSchedule, _loop_2, _i, routines_1, routine, e_3;
+        var routines, session_1, e_3, agendamentos_1, lastSchedule, _loop_2, _i, routines_1, routine, e_4;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, getStudentRoutines(student.ref)];
@@ -542,9 +642,9 @@ function startScheduleForStudent(student, daysException) {
                     session_1 = _a.sent();
                     return [3 /*break*/, 5];
                 case 4:
-                    e_2 = _a.sent();
+                    e_3 = _a.sent();
                     session_1 = false;
-                    log.error(e_2.message);
+                    log.error(e_3.message);
                     return [3 /*break*/, 5];
                 case 5:
                     if (!(session_1 !== false && isValidSession(session_1))) return [3 /*break*/, 10];
@@ -586,8 +686,8 @@ function startScheduleForStudent(student, daysException) {
                     _a.sent();
                     return [3 /*break*/, 9];
                 case 8:
-                    e_3 = _a.sent();
-                    log.error(e_3);
+                    e_4 = _a.sent();
+                    log.error(e_4);
                     return [3 /*break*/, 9];
                 case 9: return [2 /*return*/, Promise.all(agendamentos_1)];
                 case 10: return [3 /*break*/, 12];
@@ -601,7 +701,7 @@ function startScheduleForStudent(student, daysException) {
 }
 function saveError(studentRef, schedule) {
     return __awaiter(this, void 0, void 0, function () {
-        var e_4;
+        var e_5;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -620,8 +720,8 @@ function saveError(studentRef, schedule) {
                     log.info('Erro salvo');
                     return [3 /*break*/, 4];
                 case 3:
-                    e_4 = _a.sent();
-                    log.error("Erro ao salvar o erro " + e_4);
+                    e_5 = _a.sent();
+                    log.error("Erro ao salvar o erro " + e_5);
                     return [3 /*break*/, 4];
                 case 4: return [2 /*return*/];
             }
@@ -681,6 +781,155 @@ function fetchScheduleException() {
         });
     });
 }
+function fetchHistorySchedulement(student) {
+    return __awaiter(this, void 0, void 0, function () {
+        var headers, twoDaysAgo, lastHistory, bodyRequest, bodyAppend, key, requestConfig;
+        return __generator(this, function (_a) {
+            headers = [['Cookie', student.session]];
+            twoDaysAgo = moment().subtract(2, 'days').format("DD/MM/YYYY");
+            lastHistory = student.lastHistoryCheck.format("DD/MM/YYYY");
+            bodyRequest = querystring.stringify({
+                'callCount': '1',
+                'nextReverseAjaxIndex': '0',
+                'c0-scriptName': 'agendamentoUsuarioAjaxTable',
+                'c0-methodName': 'search',
+                'c0-id': '0'
+            });
+            bodyAppend = {
+                'c0-param0': 'number:0',
+                'c0-param1': 'number:20',
+                'c0-e1': "" + querystring.escape(lastHistory),
+                'c0-e2': "string:" + querystring.escape(twoDaysAgo),
+                'c0-e3': 'string:dataRefAgendada',
+                'c0-e4': 'string:desc',
+                'c0-param2': 'Object_Object:{inicio:reference:c0-e1, fim:reference:c0-e2, orderBy:reference:c0-e3, orderMode:reference:c0-e4}',
+                'batchId': 5,
+                'instanceId': 0,
+                'page': '/ru/usuario/agendamento/agendamento.html?action=list',
+                'scriptSessionId': ''
+            };
+            for (key in bodyAppend) {
+                bodyRequest += "&" + key + "=" + bodyAppend[key];
+            }
+            requestConfig = {
+                body: bodyRequest,
+                headers: headers,
+                referrer: 'https://portal.ufsm.br/ru/usuario/agendamento/agendamento.html?action=list',
+                url: 'https://portal.ufsm.br/ru/dwr/call/plaincall/agendamentoUsuarioAjaxTable.search.dwr'
+            };
+            return [2 /*return*/, makeRequest(requestConfig)
+                    .then(function (response) { return response.text(); })
+                    .then(function (responseTxt) { return parseHistorySchedulement(responseTxt); })];
+        });
+    });
+}
+function executeHistoryCheck(student) {
+    return __awaiter(this, void 0, void 0, function () {
+        var _this = this;
+        return __generator(this, function (_a) {
+            return [2 /*return*/, fetchHistorySchedulement(student)
+                    .then(function (history) { return __awaiter(_this, void 0, void 0, function () {
+                    var penalties, _i, history_1, day, shouldAddPenalty;
+                    return __generator(this, function (_a) {
+                        switch (_a.label) {
+                            case 0:
+                                penalties = 0;
+                                if (!(history.length != 0)) return [3 /*break*/, 4];
+                                _i = 0, history_1 = history;
+                                _a.label = 1;
+                            case 1:
+                                if (!(_i < history_1.length)) return [3 /*break*/, 4];
+                                day = history_1[_i];
+                                return [4 /*yield*/, wasScheduledByBot(student.matricula, day.format("DD/MM/YYYY"))];
+                            case 2:
+                                shouldAddPenalty = _a.sent();
+                                console.log("Foi pelo bot? " + shouldAddPenalty);
+                                if (shouldAddPenalty) {
+                                    console.log("Add penalty " + student.matricula);
+                                    penalties++;
+                                }
+                                _a.label = 3;
+                            case 3:
+                                _i++;
+                                return [3 /*break*/, 1];
+                            case 4: return [2 /*return*/, penalties];
+                        }
+                    });
+                }); })
+                    .then(function (penalties) {
+                    var updates = {
+                        lastHistoryCheck: moment().subtract(2, 'days').toDate()
+                    };
+                    if (penalties > 0) {
+                        student.banCount++;
+                        var banUntil = moment().add(7 * penalties * (student.banCount * 2), 'days').toDate();
+                        updates = __assign({ banCount: student.banCount, banUntil: banUntil }, updates);
+                        log.info("Ban applyed to " + student.matricula + " until " + moment(banUntil).format('DD/MM'));
+                    }
+                    student.ref.update(updates);
+                })["catch"](function () {
+                    log.error("Error on execute history check for " + student.matricula);
+                })];
+        });
+    });
+}
+function wasScheduledByBot(matricula, dia) {
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            return [2 /*return*/, db.collection('agendamentos')
+                    .where('dia', '==', dia)
+                    .where('matricula', '==', matricula)
+                    .limit(1)
+                    .get()
+                    .then(function (querySnapshot) {
+                    return !querySnapshot.empty;
+                })["catch"](function () {
+                    return false;
+                })];
+        });
+    });
+}
+function sanitizeHistoryCheckStudent(student) {
+    if (isUndefined(student.lastHistoryCheck) || student.lastHistoryCheck == null) {
+        student.lastHistoryCheck = moment().subtract(7, 'days');
+    }
+    else {
+        student.lastHistoryCheck = moment(student.lastHistoryCheck);
+    }
+    if (isUndefined(student.banUntil) || student.banUntil == null) {
+        student.banUntil = moment();
+    }
+    else {
+        student.banUntil = moment(student.banUntil);
+    }
+    if (isUndefined(student.banUntil) || student.banUntil == null) {
+        student.banCount = 0;
+    }
+}
+function parseHistorySchedulement(historyTxt) {
+    var statuses = historyTxt.match(/,comparecido(.*?),/g);
+    var datesRef = historyTxt.match(/,dataRefAgendada(.*?),/g);
+    var available = historyTxt.match(/,disponibilizado(.*?),/g);
+    var history = [];
+    try {
+        if (statuses == null) {
+            statuses = [];
+        }
+        for (var i = 0; i < statuses.length; i++) {
+            statuses[i] = statuses[i].replace(/,/g, '').substring(12); //`,comparecido:false,` => `false`
+            datesRef[i] = parseInt(datesRef[i].replace(/(,|\(|\))/g, '').substring(24)); //`,dataRefAgendada:new Date(1559271600000),` => `1559271600000`
+            available[i] = available[i].replace(/,/g, '').substring(16); //`,disponibilizado:false,` => `false`
+            if (statuses[i] === 'false' && (available[i] === 'false' || available[i] === 'null')) { //Nao compareceu e nao disponibilizou
+                console.log("Corno não veio");
+                history.push(moment(datesRef[i]).add(3, 'hours')); //Add 3 hours due to timezone
+            }
+        }
+    }
+    catch (e) {
+        log.error("Error on parse HistorySchedule: " + e.message);
+    }
+    return history;
+}
 function unscapeUnicode(text) {
     return decodeURIComponent(JSON.parse("\"" + text + "\""));
 }
@@ -739,9 +988,16 @@ function isDevMode() {
 }
 function countTotalUsers() {
     db.collection('estudantes')
+        .where('matricula', '==', '201910474')
         .get()
         .then(function (querySnapshot) {
         console.log("Total alunos: " + querySnapshot.size);
+        querySnapshot.forEach(function (docSnap) {
+            console.log(docSnap.data());
+            docSnap.ref.update({ lastHistoryCheck: null });
+        });
+    })["catch"](function (e) {
+        console.log(e);
     });
 }
 function saveSchedulement(studentRef, schedule) {
