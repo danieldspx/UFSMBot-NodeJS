@@ -251,12 +251,12 @@ app.get('/api/errors/replay', function (req, res) {
         log.error("Error replay not successfull. Error message: " + error);
     });
 });
-app.get('/api/routines', function (req, res) {
-    //TODO: change this to make it right
+app.get('/api/history-check', function (req, res) {
     res.send({
-        message: 'basic routines started successfully...'
+        message: 'history check started successfully...'
     });
-    getStudentsHistoryCheck(100)
+    log.info('History check started successfully.');
+    getStudentsHistoryCheck(300)
         .then(function (studentsHistoryCheck) { return __awaiter(_this, void 0, void 0, function () {
         var allHistoryCheck, _i, studentsHistoryCheck_1, student, session, e_2;
         return __generator(this, function (_a) {
@@ -843,7 +843,6 @@ function executeHistoryCheck(student) {
                                 return [4 /*yield*/, wasScheduledByBot(student.matricula, day.format("DD/MM/YYYY"))];
                             case 2:
                                 shouldAddPenalty = _a.sent();
-                                console.log("Foi pelo bot? " + shouldAddPenalty);
                                 if (shouldAddPenalty) {
                                     console.log("Add penalty " + student.matricula);
                                     penalties++;
@@ -920,7 +919,6 @@ function parseHistorySchedulement(historyTxt) {
             datesRef[i] = parseInt(datesRef[i].replace(/(,|\(|\))/g, '').substring(24)); //`,dataRefAgendada:new Date(1559271600000),` => `1559271600000`
             available[i] = available[i].replace(/,/g, '').substring(16); //`,disponibilizado:false,` => `false`
             if (statuses[i] === 'false' && (available[i] === 'false' || available[i] === 'null')) { //Nao compareceu e nao disponibilizou
-                console.log("Corno não veio");
                 history.push(moment(datesRef[i]).add(3, 'hours')); //Add 3 hours due to timezone
             }
         }
@@ -988,14 +986,9 @@ function isDevMode() {
 }
 function countTotalUsers() {
     db.collection('estudantes')
-        .where('matricula', '==', '201910474')
         .get()
         .then(function (querySnapshot) {
         console.log("Total alunos: " + querySnapshot.size);
-        querySnapshot.forEach(function (docSnap) {
-            console.log(docSnap.data());
-            docSnap.ref.update({ lastHistoryCheck: null });
-        });
     })["catch"](function (e) {
         console.log(e);
     });
@@ -1006,9 +999,9 @@ function saveSchedulement(studentRef, schedule) {
     db.collection("agendamentos")
         .add(__assign({ estudante: studentRef, schedule: moment(schedule.dia, "DD/MM/YYYY").toDate(), scheduledAt: moment().toDate() }, schedule))
         .then(function () {
-        log.info("Sucesso ao salvar agendamento");
+        log.info("Sucesso ao salvar agendamento " + schedule.matricula);
     })["catch"](function () {
-        log.error("Erro ao salvar agendamento");
+        log.error("Erro ao salvar agendamento " + schedule.matricula);
     });
 }
-countTotalUsers();
+// countTotalUsers();
