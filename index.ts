@@ -370,13 +370,16 @@ async function getStudentByMatricula(matricula: string, password: string){
       .then(() => {
         return studentRef;
       })
-    } else {//Student does not exist
+    } else {//Student does not exist, creates one
       return db.collection('estudantes')
       .add({
         matricula: matricula,
         password: encryptedPassword,
         lastSchedule: null,
         lastHistoryCheck: null
+      })
+      .then(() => {
+        updateUsersCount();
       })
     }
   })
@@ -842,6 +845,27 @@ function isDevMode(): boolean{
   return process.env.DEV === "true";
 }
 
+function updateUsersCount(){//Update total users on DB
+  db.doc('admin/users')
+  .get()
+  .then((docSnap) => {
+    let users = docSnap.data();
+    let totalUsers = 0;
+    if(!isUndefined(users.total)){
+      totalUsers = users.total;
+    }
+    totalUsers++;
+
+    docSnap.ref.update({
+      total: totalUsers
+    })
+    .catch(() => {
+      log.error('Erro ao atualizar contador de usuários')
+    })
+  })
+
+}
+
 function countTotalUsers(){
   db.collection('estudantes')
   .get()
@@ -871,4 +895,4 @@ function saveSchedulement(studentRef: string, schedule: Schedule){
   })
 }
 
-// countTotalUsers();
+//countTotalUsers();

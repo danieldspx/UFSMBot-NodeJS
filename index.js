@@ -461,13 +461,16 @@ function getStudentByMatricula(matricula, password) {
                                     return studentRef_1;
                                 })];
                         }
-                        else { //Student does not exist
+                        else { //Student does not exist, creates one
                             return [2 /*return*/, db.collection('estudantes')
                                     .add({
                                     matricula: matricula,
                                     password: encryptedPassword,
                                     lastSchedule: null,
                                     lastHistoryCheck: null
+                                })
+                                    .then(function () {
+                                    updateUsersCount();
                                 })];
                         }
                         return [2 /*return*/];
@@ -984,6 +987,23 @@ function isLastIndex(pos, arrayCheck) {
 function isDevMode() {
     return process.env.DEV === "true";
 }
+function updateUsersCount() {
+    db.doc('admin/users')
+        .get()
+        .then(function (docSnap) {
+        var users = docSnap.data();
+        var totalUsers = 0;
+        if (!isUndefined(users.total)) {
+            totalUsers = users.total;
+        }
+        totalUsers++;
+        docSnap.ref.update({
+            total: totalUsers
+        })["catch"](function () {
+            log.error('Erro ao atualizar contador de usuários');
+        });
+    });
+}
 function countTotalUsers() {
     db.collection('estudantes')
         .get()
@@ -1004,4 +1024,4 @@ function saveSchedulement(studentRef, schedule) {
         log.error("Erro ao salvar agendamento " + schedule.matricula);
     });
 }
-// countTotalUsers();
+//countTotalUsers();
