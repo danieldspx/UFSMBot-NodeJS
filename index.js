@@ -735,7 +735,7 @@ function getStudentNameAndCourse(matricula, session) {
             headers = [['Cookie', session]];
             requestConfig = {
                 headers: headers,
-                body: "callCount=1\npage=/ru/usuario/transferencia/credito/form.html\nhttpSessionId=7caf08d8244959875a34e1758d0b\nscriptSessionId=5000E7D9FF69206B62CD4E56F325D285348\nc0-scriptName=usuarioRuCaptchaAjaxService\nc0-methodName=search\nc0-id=0\nc0-param0=number:0\nc0-param1=number:10\nc0-e1=string:" + matricula + "\nc0-e2=string:sono\nc0-e3=null:null\nc0-e4=null:null\nc0-param2=Object_Object:{matricula:reference:c0-e1, captcha:reference:c0-e2, orderBy:reference:c0-e3, orderMode:reference:c0-e4}\nbatchId=7\n",
+                body: "callCount=1\nnextReverseAjaxIndex=0\nc0-scriptName=usuarioRuCaptchaAjaxService\nc0-methodName=search\nc0-id=0\nc0-param0=number:0\nc0-param1=number:10\nc0-e1=string:" + matricula + "\nc0-e2=string:CAPTCHA\nc0-e3=null:null\nc0-e4=null:null\nc0-param2=Object_Object:{matricula:reference:c0-e1, captcha:reference:c0-e2, orderBy:reference:c0-e3, orderMode:reference:c0-e4}\nbatchId=2\ninstanceId=0\npage=/ru/usuario/transferencia/credito/form.html\nscriptSessionId=5000E7D9FF69206B62CD4E56F325D285348\n",
                 referrer: 'https://portal.ufsm.br/ru/usuario/transferencia/credito/form.html',
                 url: 'https://portal.ufsm.br/ru/dwr/call/plaincall/usuarioRuCaptchaAjaxService.search.dwr'
             };
@@ -744,6 +744,7 @@ function getStudentNameAndCourse(matricula, session) {
                     return response.text();
                 })
                     .then(function (data) {
+                    log.info(data);
                     var info = {
                         nome: data.match(/s0.nome="(?:.*)"/i)[0].slice(9).replace('"', ''),
                         curso: data.match(/s5.nome="(?:.*)"/i)[0].slice(9).replace('"', '')
@@ -901,7 +902,7 @@ function sanitizeHistoryCheckStudent(student) {
     else {
         student.banUntil = moment(student.banUntil);
     }
-    if (isUndefined(student.banUntil) || student.banUntil == null) {
+    if (isUndefined(student.banCount) || student.banCount == null) {
         student.banCount = 0;
     }
 }
@@ -1004,4 +1005,4 @@ function saveSchedulement(studentRef, schedule) {
         log.error("Erro ao salvar agendamento " + schedule.matricula);
     });
 }
-// countTotalUsers();
+//countTotalUsers();
