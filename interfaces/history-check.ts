@@ -8,5 +8,6 @@ export interface HistoryCheck {
   password: string,
   lastHistoryCheck: Moment,
   banUntil: Moment,
-  banCount: number
+  banCount: number,
+  email?: string
 }

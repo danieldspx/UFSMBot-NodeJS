@@ -200,7 +200,7 @@ app.get('/api/history-check', (req, res) => {
     message: 'history check started successfully...'
   })
   log.info('History check started successfully.')
-  getStudentsHistoryCheck(300)
+  getStudentsHistoryCheck(490)
   .then(async (studentsHistoryCheck: HistoryCheck[]) => {
     if(Array.isArray(studentsHistoryCheck)){
       let allHistoryCheck = [];
@@ -476,7 +476,8 @@ async function getStudentsHistoryCheck(limit: number): Promise<HistoryCheck[] | 
         password: decrypt(student.password),
         banUntil: student.banUntil,
         banCount: student.banCount,
-        lastHistoryCheck: student.lastHistoryCheck
+        lastHistoryCheck: student.lastHistoryCheck,
+        email: student.email
       });
     })
 
@@ -603,10 +604,9 @@ async function getStudentNameAndCourse(matricula: string, session: string): Prom
     return response.text()
   })
   .then((data) => {
-    log.info(data);
     let info = {
-      nome: data.match(/s0.nome="(?:.*)"/i)[0].slice(9).replace('"', ''),
-      curso: data.match(/s5.nome="(?:.*)"/i)[0].slice(9).replace('"', '')
+      nome: getProperty(data, 'nome'),
+      curso: getProperty(getProperty(data, 'unidade', false), 'nome')
     };
     info.nome = unscapeUnicode(info.nome);
     info.curso = unscapeUnicode(info.curso);
@@ -616,6 +616,20 @@ async function getStudentNameAndCourse(matricula: string, session: string): Prom
     log.error(`Error when fetching data from the user. Error message: ${error}`);
     return false;
   });
+}
+
+function getProperty(data: string, label: string, isString: boolean = true): string{
+
+  const sizeSlice = label.length + 1
+  const regExpProp = isString ? `${label}:"(.*?)"` : `${label}:{(.*?)}`
+
+  let result = data.match(RegExp(regExpProp))[0].slice(sizeSlice)
+
+  if(isString){
+    return result.replace('"', '')
+  }
+
+  return result;
 }
 
 async function fetchScheduleException(): Promise<string[]>{
@@ -676,7 +690,7 @@ async function fetchHistorySchedulement(student: HistoryCheck){
   .then((responseTxt: string) => parseHistorySchedulement(responseTxt));
 }
 
-async function executeHistoryCheck(student: HistoryCheck){
+async function  executeHistoryCheck(student: HistoryCheck){
   return fetchHistorySchedulement(student)
   .then(async (history) => {
     let penalties: number = 0;
@@ -698,7 +712,7 @@ async function executeHistoryCheck(student: HistoryCheck){
 
     if(penalties > 0){
       student.banCount++;
-      let banUntil = moment().add(7*penalties*(student.banCount*2), 'days').toDate();
+      let banUntil = moment().add(7*penalties*student.banCount, 'days').toDate();
       updates = {
         banCount: student.banCount,
         banUntil: banUntil,
@@ -706,6 +720,9 @@ async function executeHistoryCheck(student: HistoryCheck){
       };
 
       log.info(`Ban applyed to ${student.matricula} until ${moment(banUntil).format('DD/MM')}`)
+      if(!isUndefined(student.email)){
+        log.info(student.email);
+      }
     }
 
     student.ref.update(updates);
@@ -845,9 +862,20 @@ function isDevMode(): boolean{
 
 function countTotalUsers(){
   db.collection('estudantes')
+  .where('banCount', '>=', 1)
   .get()
   .then((querySnapshot) => {
     console.log(`Total alunos: ${querySnapshot.size}`);
+    querySnapshot.forEach((docSnap) => {
+      docSnap.ref.collection('rotinas')
+      .get()
+      .then((collectionSnap) => {
+        collectionSnap.forEach((collDocSnap) => {
+          collDocSnap.ref.delete();
+          console.log('Rotina deletada');
+        })
+      })
+    })
   })
   .catch((e) => {
     console.log(e);
@@ -872,4 +900,4 @@ function saveSchedulement(studentRef: string, schedule: Schedule){
   })
 }
 
-//countTotalUsers();
+// countTotalUsers();

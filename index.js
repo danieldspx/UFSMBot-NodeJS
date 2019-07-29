@@ -256,7 +256,7 @@ app.get('/api/history-check', function (req, res) {
         message: 'history check started successfully...'
     });
     log.info('History check started successfully.');
-    getStudentsHistoryCheck(300)
+    getStudentsHistoryCheck(490)
         .then(function (studentsHistoryCheck) { return __awaiter(_this, void 0, void 0, function () {
         var allHistoryCheck, _i, studentsHistoryCheck_1, student, session, e_2;
         return __generator(this, function (_a) {
@@ -580,7 +580,8 @@ function getStudentsHistoryCheck(limit) {
                             password: decrypt(student.password),
                             banUntil: student.banUntil,
                             banCount: student.banCount,
-                            lastHistoryCheck: student.lastHistoryCheck
+                            lastHistoryCheck: student.lastHistoryCheck,
+                            email: student.email
                         });
                     });
                     return db.collection('estudantes')
@@ -744,10 +745,9 @@ function getStudentNameAndCourse(matricula, session) {
                     return response.text();
                 })
                     .then(function (data) {
-                    log.info(data);
                     var info = {
-                        nome: data.match(/s0.nome="(?:.*)"/i)[0].slice(9).replace('"', ''),
-                        curso: data.match(/s5.nome="(?:.*)"/i)[0].slice(9).replace('"', '')
+                        nome: getProperty(data, 'nome'),
+                        curso: getProperty(getProperty(data, 'unidade', false), 'nome')
                     };
                     info.nome = unscapeUnicode(info.nome);
                     info.curso = unscapeUnicode(info.curso);
@@ -758,6 +758,16 @@ function getStudentNameAndCourse(matricula, session) {
                 })];
         });
     });
+}
+function getProperty(data, label, isString) {
+    if (isString === void 0) { isString = true; }
+    var sizeSlice = label.length + 1;
+    var regExpProp = isString ? label + ":\"(.*?)\"" : label + ":{(.*?)}";
+    var result = data.match(RegExp(regExpProp))[0].slice(sizeSlice);
+    if (isString) {
+        return result.replace('"', '');
+    }
+    return result;
 }
 function fetchScheduleException() {
     return __awaiter(this, void 0, void 0, function () {
@@ -862,9 +872,12 @@ function executeHistoryCheck(student) {
                     };
                     if (penalties > 0) {
                         student.banCount++;
-                        var banUntil = moment().add(7 * penalties * (student.banCount * 2), 'days').toDate();
+                        var banUntil = moment().add(7 * penalties * student.banCount, 'days').toDate();
                         updates = __assign({ banCount: student.banCount, banUntil: banUntil }, updates);
                         log.info("Ban applyed to " + student.matricula + " until " + moment(banUntil).format('DD/MM'));
+                        if (!isUndefined(student.email)) {
+                            log.info(student.email);
+                        }
                     }
                     student.ref.update(updates);
                 })["catch"](function () {
@@ -987,9 +1000,20 @@ function isDevMode() {
 }
 function countTotalUsers() {
     db.collection('estudantes')
+        .where('banCount', '>=', 1)
         .get()
         .then(function (querySnapshot) {
         console.log("Total alunos: " + querySnapshot.size);
+        querySnapshot.forEach(function (docSnap) {
+            docSnap.ref.collection('rotinas')
+                .get()
+                .then(function (collectionSnap) {
+                collectionSnap.forEach(function (collDocSnap) {
+                    collDocSnap.ref["delete"]();
+                    console.log('Rotina deletada');
+                });
+            });
+        });
     })["catch"](function (e) {
         console.log(e);
     });
@@ -1005,4 +1029,4 @@ function saveSchedulement(studentRef, schedule) {
         log.error("Erro ao salvar agendamento " + schedule.matricula);
     });
 }
-//countTotalUsers();
+// countTotalUsers();
