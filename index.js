@@ -634,7 +634,7 @@ function startScheduleForStudent(student, daysException) {
                 case 0: return [4 /*yield*/, getStudentRoutines(student.ref)];
                 case 1:
                     routines = _a.sent();
-                    if (!Array.isArray(routines)) return [3 /*break*/, 11];
+                    if (!(Array.isArray(routines) && routines.length != 0)) return [3 /*break*/, 11];
                     _a.label = 2;
                 case 2:
                     _a.trys.push([2, 4, , 5]);
@@ -692,9 +692,7 @@ function startScheduleForStudent(student, daysException) {
                     return [3 /*break*/, 9];
                 case 9: return [2 /*return*/, Promise.all(agendamentos_1)];
                 case 10: return [3 /*break*/, 12];
-                case 11:
-                    log.error("getStudentRoutines returned false");
-                    return [2 /*return*/, null];
+                case 11: return [2 /*return*/, null];
                 case 12: return [2 /*return*/];
             }
         });

@@ -526,7 +526,7 @@ async function getStudentRoutines(ref: string): Promise<RoutineWrapper[] | boole
 
 async function startScheduleForStudent(student: StudentWrapper, daysException: any[]): Promise<void[]>{
   let routines = await getStudentRoutines(student.ref);
-  if(Array.isArray(routines)){
+  if(Array.isArray(routines) && routines.length != 0){
     let session;
     try {
       session = await getLoginSessionID(student.matricula, student.password);
@@ -570,7 +570,6 @@ async function startScheduleForStudent(student: StudentWrapper, daysException: a
       return Promise.all(agendamentos);
     }
   } else {
-    log.error("getStudentRoutines returned false");
     return null;
   }
 }
