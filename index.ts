@@ -390,6 +390,7 @@ async function getStudentsRef(limit: number, offset: number): Promise<StudentWra
   let studentsRef:StudentWrapper[] = [];
   return db.collection('estudantes')
   .where('lastSchedule', '==', null)
+  .where('agreementAccepted', '==', true)
   .limit(limit)
   .offset(offset)
   .get()
@@ -404,6 +405,7 @@ async function getStudentsRef(limit: number, offset: number): Promise<StudentWra
     })
     return db.collection('estudantes')
     .where('lastSchedule','<',today.add(2, 'days').toDate())
+    .where('agreementAccepted', '==', true)
     .limit(limit)
     .offset(offset)
     .get()
@@ -419,7 +421,7 @@ async function getStudentsRef(limit: number, offset: number): Promise<StudentWra
     })
     return studentsRef;
   })
-  .catch(() => {
+  .catch((e) => {
     return false;
   })
 }

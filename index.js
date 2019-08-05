@@ -487,6 +487,7 @@ function getStudentsRef(limit, offset) {
             studentsRef = [];
             return [2 /*return*/, db.collection('estudantes')
                     .where('lastSchedule', '==', null)
+                    .where('agreementAccepted', '==', true)
                     .limit(limit)
                     .offset(offset)
                     .get()
@@ -501,6 +502,7 @@ function getStudentsRef(limit, offset) {
                     });
                     return db.collection('estudantes')
                         .where('lastSchedule', '<', today.add(2, 'days').toDate())
+                        .where('agreementAccepted', '==', true)
                         .limit(limit)
                         .offset(offset)
                         .get();
@@ -515,7 +517,7 @@ function getStudentsRef(limit, offset) {
                         });
                     });
                     return studentsRef;
-                })["catch"](function () {
+                })["catch"](function (e) {
                     return false;
                 })];
         });
