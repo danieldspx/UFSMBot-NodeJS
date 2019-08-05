@@ -526,48 +526,58 @@ async function getStudentRoutines(ref: string): Promise<RoutineWrapper[] | boole
 
 async function startScheduleForStudent(student: StudentWrapper, daysException: any[]): Promise<void[]>{
   let routines = await getStudentRoutines(student.ref);
-  if(Array.isArray(routines) && routines.length != 0){
-    let session;
-    try {
-      session = await getLoginSessionID(student.matricula, student.password);
-    } catch(e) {
-      session = false;
-      log.error(e.message);
-    }
-    if(session !== false && isValidSession(<string>session)){
-      let agendamentos: Promise<void>[] = [];
-      let lastSchedule: Moment = moment();
-      for (let routine of routines) {
-        const days = convertDaysToSchedule(routine.dias);
-        const lastDay = moment(_.last(days), "DD/MM/YYYY");
-        _.pullAll(days, daysException);//Remove the days that are the exception
-        if(isUndefined(lastSchedule)){
-          lastSchedule = lastDay;
-        } else if(lastSchedule.isBefore(lastDay)) {
-          lastSchedule = lastDay;
-        }
-        days.forEach((day, index) => {
-          let schedule = {
-            dia: day,
-            restaurante: routine.restaurante,
-            refeicao: routine.tiposRefeicao,
-            matricula: student.matricula,
-            password: student.password,
-            session: <string>session
-          };
-          agendamentos.push(
-            executeFlowAgendamento(schedule, student.ref, isLastIndex(index, days))
-          )
-        })
+  if(Array.isArray(routines)){
+    if(routines.length != 0){//Proceed only if has routines
+      let session;
+      try {
+        session = await getLoginSessionID(student.matricula, student.password);
+      } catch(e) {
+        session = false;
+        log.error(e.message);
       }
+      if(session !== false && isValidSession(<string>session)){
+        let agendamentos: Promise<void>[] = [];
+        let lastSchedule: Moment = moment();
+        for (let routine of routines) {
+          const days = convertDaysToSchedule(routine.dias);
+          const lastDay = moment(_.last(days), "DD/MM/YYYY");
+          _.pullAll(days, daysException);//Remove the days that are the exception
+          if(isUndefined(lastSchedule)){
+            lastSchedule = lastDay;
+          } else if(lastSchedule.isBefore(lastDay)) {
+            lastSchedule = lastDay;
+          }
+          days.forEach((day, index) => {
+            let schedule = {
+              dia: day,
+              restaurante: routine.restaurante,
+              refeicao: routine.tiposRefeicao,
+              matricula: student.matricula,
+              password: student.password,
+              session: <string>session
+            };
+            agendamentos.push(
+              executeFlowAgendamento(schedule, student.ref, isLastIndex(index, days))
+            )
+          })
+        }
+        try{
+          await db.doc(student.ref).update({
+            lastSchedule: lastSchedule.toDate()
+          });
+        }catch(e){
+          log.error(e);
+        }
+        return Promise.all(agendamentos);
+      }
+    } else {//Has no routines, so today was the last schedule
       try{
         await db.doc(student.ref).update({
-          lastSchedule: lastSchedule.toDate()
+          lastSchedule: new Date()
         });
       }catch(e){
         log.error(e);
       }
-      return Promise.all(agendamentos);
     }
   } else {
     return null;

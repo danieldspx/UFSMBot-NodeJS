@@ -628,13 +628,14 @@ function getStudentRoutines(ref) {
 }
 function startScheduleForStudent(student, daysException) {
     return __awaiter(this, void 0, void 0, function () {
-        var routines, session_1, e_3, agendamentos_1, lastSchedule, _loop_2, _i, routines_1, routine, e_4;
+        var routines, session_1, e_3, agendamentos_1, lastSchedule, _loop_2, _i, routines_1, routine, e_4, e_5;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, getStudentRoutines(student.ref)];
                 case 1:
                     routines = _a.sent();
-                    if (!(Array.isArray(routines) && routines.length != 0)) return [3 /*break*/, 11];
+                    if (!Array.isArray(routines)) return [3 /*break*/, 15];
+                    if (!(routines.length != 0)) return [3 /*break*/, 11];
                     _a.label = 2;
                 case 2:
                     _a.trys.push([2, 4, , 5]);
@@ -691,16 +692,29 @@ function startScheduleForStudent(student, daysException) {
                     log.error(e_4);
                     return [3 /*break*/, 9];
                 case 9: return [2 /*return*/, Promise.all(agendamentos_1)];
-                case 10: return [3 /*break*/, 12];
-                case 11: return [2 /*return*/, null];
-                case 12: return [2 /*return*/];
+                case 10: return [3 /*break*/, 14];
+                case 11:
+                    _a.trys.push([11, 13, , 14]);
+                    return [4 /*yield*/, db.doc(student.ref).update({
+                            lastSchedule: new Date()
+                        })];
+                case 12:
+                    _a.sent();
+                    return [3 /*break*/, 14];
+                case 13:
+                    e_5 = _a.sent();
+                    log.error(e_5);
+                    return [3 /*break*/, 14];
+                case 14: return [3 /*break*/, 16];
+                case 15: return [2 /*return*/, null];
+                case 16: return [2 /*return*/];
             }
         });
     });
 }
 function saveError(studentRef, schedule) {
     return __awaiter(this, void 0, void 0, function () {
-        var e_5;
+        var e_6;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -719,8 +733,8 @@ function saveError(studentRef, schedule) {
                     log.info('Erro salvo');
                     return [3 /*break*/, 4];
                 case 3:
-                    e_5 = _a.sent();
-                    log.error("Erro ao salvar o erro " + e_5);
+                    e_6 = _a.sent();
+                    log.error("Erro ao salvar o erro " + e_6);
                     return [3 /*break*/, 4];
                 case 4: return [2 /*return*/];
             }
