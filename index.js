@@ -501,7 +501,7 @@ function getStudentsRef(limit, offset) {
                         });
                     });
                     return db.collection('estudantes')
-                        .where('lastSchedule', '<', today.add(2, 'days').toDate())
+                        .where('lastSchedule', '<', today.add(3, 'days').toDate())
                         .where('agreementAccepted', '==', true)
                         .limit(limit)
                         .offset(offset)
@@ -630,7 +630,7 @@ function getStudentRoutines(ref) {
 }
 function startScheduleForStudent(student, daysException) {
     return __awaiter(this, void 0, void 0, function () {
-        var routines, session_1, e_3, agendamentos_1, lastSchedule, _loop_2, _i, routines_1, routine, e_4, e_5;
+        var routines, session_1, e_3, agendamentos_1, lastSchedule, _loop_2, _i, routines_1, routine, e_4, today, e_5;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, getStudentRoutines(student.ref)];
@@ -697,8 +697,10 @@ function startScheduleForStudent(student, daysException) {
                 case 10: return [3 /*break*/, 14];
                 case 11:
                     _a.trys.push([11, 13, , 14]);
+                    today = new Date();
+                    today.setDate(today.getDate() + 3);
                     return [4 /*yield*/, db.doc(student.ref).update({
-                            lastSchedule: new Date()
+                            lastSchedule: today
                         })];
                 case 12:
                     _a.sent();

@@ -404,7 +404,7 @@ async function getStudentsRef(limit: number, offset: number): Promise<StudentWra
       });
     })
     return db.collection('estudantes')
-    .where('lastSchedule','<',today.add(2, 'days').toDate())
+    .where('lastSchedule','<',today.add(3, 'days').toDate())
     .where('agreementAccepted', '==', true)
     .limit(limit)
     .offset(offset)
@@ -574,8 +574,10 @@ async function startScheduleForStudent(student: StudentWrapper, daysException: a
       }
     } else {//Has no routines, so today was the last schedule
       try{
+        let today = new Date();
+        today.setDate(today.getDate() + 3);
         await db.doc(student.ref).update({
-          lastSchedule: new Date()
+          lastSchedule: today
         });
       }catch(e){
         log.error(e);
