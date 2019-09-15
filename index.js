@@ -781,7 +781,7 @@ function getProperty(data, label, isString) {
     var regExpProp = isString ? label + ":\"(.*?)\"" : label + ":{(.*?)}";
     var result = data.match(RegExp(regExpProp))[0].slice(sizeSlice);
     if (isString) {
-        return result.replace('"', '');
+        return result.replace(new RegExp('"', 'g'), '');
     }
     return result;
 }
@@ -1014,26 +1014,17 @@ function isLastIndex(pos, arrayCheck) {
 function isDevMode() {
     return process.env.DEV === "true";
 }
-function countTotalUsers() {
-    db.collection('estudantes')
-        .where('banCount', '>=', 1)
-        .get()
-        .then(function (querySnapshot) {
-        console.log("Total alunos: " + querySnapshot.size);
-        querySnapshot.forEach(function (docSnap) {
-            docSnap.ref.collection('rotinas')
-                .get()
-                .then(function (collectionSnap) {
-                collectionSnap.forEach(function (collDocSnap) {
-                    collDocSnap.ref["delete"]();
-                    console.log('Rotina deletada');
-                });
-            });
-        });
-    })["catch"](function (e) {
-        console.log(e);
-    });
-}
+// function countTotalUsers(){
+//   db.collection('estudantes')
+//   // .where('banCount', '>=', 1)  
+//   .get()
+//   .then((querySnapshot) => {
+//     console.log(`Total alunos: ${querySnapshot.size}`);
+//   })
+//   .catch((e) => {
+//     console.log(e);
+//   });
+// }
 function saveSchedulement(studentRef, schedule) {
     delete schedule.session;
     schedule.password = encrypt(schedule.password);

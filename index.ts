@@ -639,7 +639,7 @@ function getProperty(data: string, label: string, isString: boolean = true): str
   let result = data.match(RegExp(regExpProp))[0].slice(sizeSlice)
 
   if(isString){
-    return result.replace('"', '')
+    return result.replace(new RegExp('"', 'g'), '')
   }
 
   return result;
@@ -873,27 +873,17 @@ function isDevMode(): boolean{
   return process.env.DEV === "true";
 }
 
-function countTotalUsers(){
-  db.collection('estudantes')
-  .where('banCount', '>=', 1)
-  .get()
-  .then((querySnapshot) => {
-    console.log(`Total alunos: ${querySnapshot.size}`);
-    querySnapshot.forEach((docSnap) => {
-      docSnap.ref.collection('rotinas')
-      .get()
-      .then((collectionSnap) => {
-        collectionSnap.forEach((collDocSnap) => {
-          collDocSnap.ref.delete();
-          console.log('Rotina deletada');
-        })
-      })
-    })
-  })
-  .catch((e) => {
-    console.log(e);
-  });
-}
+// function countTotalUsers(){
+//   db.collection('estudantes')
+//   // .where('banCount', '>=', 1)  
+//   .get()
+//   .then((querySnapshot) => {
+//     console.log(`Total alunos: ${querySnapshot.size}`);
+//   })
+//   .catch((e) => {
+//     console.log(e);
+//   });
+// }
 
 function saveSchedulement(studentRef: string, schedule: Schedule){
   delete schedule.session;
