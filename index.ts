@@ -201,7 +201,7 @@ app.get('/api/history-check', (req, res) => {
     message: 'history check started successfully...'
   })
   log.info('History check started successfully.')
-  getStudentsHistoryCheck(490)
+  getStudentsHistoryCheck(100)
   .then(async (studentsHistoryCheck: HistoryCheck[]) => {
     if(Array.isArray(studentsHistoryCheck)){
       let allHistoryCheck = [];
@@ -711,7 +711,7 @@ async function  executeHistoryCheck(student: HistoryCheck){
     matricula: student.matricula,
     checkageDay: new Date(),
     banUntil: new Date(),
-    email: student.email,
+    email: isUndefined(student.email) ? "" : student.email,
     banCount: 0,
     days: []
   };
@@ -748,13 +748,27 @@ async function  executeHistoryCheck(student: HistoryCheck){
       log.info(`Ban applyed to ${student.matricula} until ${moment(banUntil).format('DD/MM')}`)
       penaltyDetail.banUntil = banUntil;
       penaltyDetail.banCount = student.banCount;
+      deleteUserRoutines(student.ref.id);
+      const today = new Date().toISOString().substr(0,10);
+      db.collection(`admin/agendamentos/penalties/${today}/details`).add(penaltyDetail);
     }
     student.ref.update(updates);
-    const today = new Date().toISOString().substr(0,10);
-    db.collection(`admin/agendamentos/penalties/${today}/details`).add(penaltyDetail);
+  })
+  .catch((e) => {
+    console.log(e)
+    log.error(`Error on execute history check for ${student.matricula}`);
+  })
+}
+
+async function deleteUserRoutines(userID: string){
+  db.collection(`estudantes/${userID}/rotinas`).get()
+  .then((querySnapshot) => {
+    querySnapshot.forEach((docSnap) => {
+      docSnap.ref.delete()
+    })
   })
   .catch(() => {
-    log.error(`Error on execute history check for ${student.matricula}`);
+    log.error(`Error on delete routines of user: ${userID}`)
   })
 }
 

@@ -256,7 +256,7 @@ app.get('/api/history-check', function (req, res) {
         message: 'history check started successfully...'
     });
     log.info('History check started successfully.');
-    getStudentsHistoryCheck(490)
+    getStudentsHistoryCheck(100)
         .then(function (studentsHistoryCheck) { return __awaiter(_this, void 0, void 0, function () {
         var allHistoryCheck, _i, studentsHistoryCheck_1, student, session, e_2;
         return __generator(this, function (_a) {
@@ -863,7 +863,7 @@ function executeHistoryCheck(student) {
                 matricula: student.matricula,
                 checkageDay: new Date(),
                 banUntil: new Date(),
-                email: student.email,
+                email: isUndefined(student.email) ? "" : student.email,
                 banCount: 0,
                 days: []
             };
@@ -907,13 +907,30 @@ function executeHistoryCheck(student) {
                         log.info("Ban applyed to " + student.matricula + " until " + moment(banUntil).format('DD/MM'));
                         penaltyDetail.banUntil = banUntil;
                         penaltyDetail.banCount = student.banCount;
+                        deleteUserRoutines(student.ref.id);
+                        var today = new Date().toISOString().substr(0, 10);
+                        db.collection("admin/agendamentos/penalties/" + today + "/details").add(penaltyDetail);
                     }
                     student.ref.update(updates);
-                    var today = new Date().toISOString().substr(0, 10);
-                    db.collection("admin/agendamentos/penalties/" + today + "/details").add(penaltyDetail);
-                })["catch"](function () {
+                })["catch"](function (e) {
+                    console.log(e);
                     log.error("Error on execute history check for " + student.matricula);
                 })];
+        });
+    });
+}
+function deleteUserRoutines(userID) {
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            db.collection("estudantes/" + userID + "/rotinas").get()
+                .then(function (querySnapshot) {
+                querySnapshot.forEach(function (docSnap) {
+                    docSnap.ref["delete"]();
+                });
+            })["catch"](function () {
+                log.error("Error on delete routines of user: " + userID);
+            });
+            return [2 /*return*/];
         });
     });
 }
