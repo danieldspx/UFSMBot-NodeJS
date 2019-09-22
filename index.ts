@@ -15,8 +15,9 @@ import { Schedule } from './interfaces/schedule';
 import { StudentWrapper } from './interfaces/student-wrapper';
 import { RoutineWrapper } from './interfaces/routine-wrapper';
 import { HistoryCheck } from './interfaces/history-check';
-import { DocumentReference } from '@google-cloud/firestore';
+import { DocumentReference, DocumentSnapshot } from '@google-cloud/firestore';
 import { Moment } from 'moment';
+import { PenaltyDetail } from './interfaces/penalty-detail';
 //Const variables
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -371,6 +372,7 @@ async function getStudentByMatricula(matricula: string, password: string){
         return studentRef;
       })
     } else {//Student does not exist
+      incrementTotalUsers();
       return db.collection('estudantes')
       .add({
         matricula: matricula,
@@ -570,6 +572,7 @@ async function startScheduleForStudent(student: StudentWrapper, daysException: a
         }catch(e){
           log.error(e);
         }
+        await incrementTodaysSchedule(agendamentos.length);
         return Promise.all(agendamentos);
       }
     } else {//Has no routines, so today was the last schedule
@@ -704,6 +707,15 @@ async function fetchHistorySchedulement(student: HistoryCheck){
 }
 
 async function  executeHistoryCheck(student: HistoryCheck){
+  let penaltyDetail: PenaltyDetail = {
+    matricula: student.matricula,
+    checkageDay: new Date(),
+    banUntil: new Date(),
+    email: student.email,
+    banCount: 0,
+    days: []
+  };
+
   return fetchHistorySchedulement(student)
   .then(async (history) => {
     let penalties: number = 0;
@@ -712,6 +724,7 @@ async function  executeHistoryCheck(student: HistoryCheck){
           const shouldAddPenalty = await wasScheduledByBot(student.matricula, day.format("DD/MM/YYYY"));
           if(shouldAddPenalty){
             console.log(`Add penalty ${student.matricula}`);
+            penaltyDetail.days.push(day.format("DD/MM/YYYY"));
             penalties++;
           }
       }
@@ -733,12 +746,12 @@ async function  executeHistoryCheck(student: HistoryCheck){
       };
 
       log.info(`Ban applyed to ${student.matricula} until ${moment(banUntil).format('DD/MM')}`)
-      if(!isUndefined(student.email)){
-        log.info(student.email);
-      }
+      penaltyDetail.banUntil = banUntil;
+      penaltyDetail.banCount = student.banCount;
     }
-
     student.ref.update(updates);
+    const today = new Date().toISOString().substr(0,10);
+    db.collection(`admin/agendamentos/penalties/${today}/details`).add(penaltyDetail);
   })
   .catch(() => {
     log.error(`Error on execute history check for ${student.matricula}`);
@@ -871,6 +884,33 @@ function isLastIndex(pos, arrayCheck){
 
 function isDevMode(): boolean{
   return process.env.DEV === "true";
+}
+
+function incrementTotalUsers(){
+  db.doc('admin/users')
+  .get().then((docSnap) => {
+    let data = docSnap.data();
+    data.total++;
+    docSnap.ref.update(data);
+  });
+}
+
+async function incrementTodaysSchedule(increment: number = 1){
+  const today = new Date().toISOString().substr(0,10);
+  return db.doc(`admin/agendamentos/history/${today}`).get()
+  .then((docSnap: DocumentSnapshot) => {
+    return {ref: docSnap.ref, data: docSnap.data()}
+  })
+  .then((obj) => {
+    if(isUndefined(obj.data)){
+      obj.data = {total: 0};
+    }
+    obj.data.total += increment;
+    obj.ref.set(obj.data);
+  })
+  .catch(() => {
+    log.error(`Error on increment ${today} schedule`)
+  });
 }
 
 // function countTotalUsers(){

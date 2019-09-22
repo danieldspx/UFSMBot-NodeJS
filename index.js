@@ -462,6 +462,7 @@ function getStudentByMatricula(matricula, password) {
                                 })];
                         }
                         else { //Student does not exist
+                            incrementTotalUsers();
                             return [2 /*return*/, db.collection('estudantes')
                                     .add({
                                     matricula: matricula,
@@ -636,8 +637,8 @@ function startScheduleForStudent(student, daysException) {
                 case 0: return [4 /*yield*/, getStudentRoutines(student.ref)];
                 case 1:
                     routines = _a.sent();
-                    if (!Array.isArray(routines)) return [3 /*break*/, 15];
-                    if (!(routines.length != 0)) return [3 /*break*/, 11];
+                    if (!Array.isArray(routines)) return [3 /*break*/, 16];
+                    if (!(routines.length != 0)) return [3 /*break*/, 12];
                     _a.label = 2;
                 case 2:
                     _a.trys.push([2, 4, , 5]);
@@ -651,7 +652,7 @@ function startScheduleForStudent(student, daysException) {
                     log.error(e_3.message);
                     return [3 /*break*/, 5];
                 case 5:
-                    if (!(session_1 !== false && isValidSession(session_1))) return [3 /*break*/, 10];
+                    if (!(session_1 !== false && isValidSession(session_1))) return [3 /*break*/, 11];
                     agendamentos_1 = [];
                     lastSchedule = moment();
                     _loop_2 = function (routine) {
@@ -693,25 +694,28 @@ function startScheduleForStudent(student, daysException) {
                     e_4 = _a.sent();
                     log.error(e_4);
                     return [3 /*break*/, 9];
-                case 9: return [2 /*return*/, Promise.all(agendamentos_1)];
-                case 10: return [3 /*break*/, 14];
-                case 11:
-                    _a.trys.push([11, 13, , 14]);
+                case 9: return [4 /*yield*/, incrementTodaysSchedule(agendamentos_1.length)];
+                case 10:
+                    _a.sent();
+                    return [2 /*return*/, Promise.all(agendamentos_1)];
+                case 11: return [3 /*break*/, 15];
+                case 12:
+                    _a.trys.push([12, 14, , 15]);
                     today = new Date();
                     today.setDate(today.getDate() + 3);
                     return [4 /*yield*/, db.doc(student.ref).update({
                             lastSchedule: today
                         })];
-                case 12:
-                    _a.sent();
-                    return [3 /*break*/, 14];
                 case 13:
+                    _a.sent();
+                    return [3 /*break*/, 15];
+                case 14:
                     e_5 = _a.sent();
                     log.error(e_5);
-                    return [3 /*break*/, 14];
-                case 14: return [3 /*break*/, 16];
-                case 15: return [2 /*return*/, null];
-                case 16: return [2 /*return*/];
+                    return [3 /*break*/, 15];
+                case 15: return [3 /*break*/, 17];
+                case 16: return [2 /*return*/, null];
+                case 17: return [2 /*return*/];
             }
         });
     });
@@ -852,8 +856,17 @@ function fetchHistorySchedulement(student) {
 }
 function executeHistoryCheck(student) {
     return __awaiter(this, void 0, void 0, function () {
+        var penaltyDetail;
         var _this = this;
         return __generator(this, function (_a) {
+            penaltyDetail = {
+                matricula: student.matricula,
+                checkageDay: new Date(),
+                banUntil: new Date(),
+                email: student.email,
+                banCount: 0,
+                days: []
+            };
             return [2 /*return*/, fetchHistorySchedulement(student)
                     .then(function (history) { return __awaiter(_this, void 0, void 0, function () {
                     var penalties, _i, history_1, day, shouldAddPenalty;
@@ -872,6 +885,7 @@ function executeHistoryCheck(student) {
                                 shouldAddPenalty = _a.sent();
                                 if (shouldAddPenalty) {
                                     console.log("Add penalty " + student.matricula);
+                                    penaltyDetail.days.push(day.format("DD/MM/YYYY"));
                                     penalties++;
                                 }
                                 _a.label = 3;
@@ -891,11 +905,12 @@ function executeHistoryCheck(student) {
                         var banUntil = moment().add(7 * penalties * student.banCount, 'days').toDate();
                         updates = __assign({ banCount: student.banCount, banUntil: banUntil }, updates);
                         log.info("Ban applyed to " + student.matricula + " until " + moment(banUntil).format('DD/MM'));
-                        if (!isUndefined(student.email)) {
-                            log.info(student.email);
-                        }
+                        penaltyDetail.banUntil = banUntil;
+                        penaltyDetail.banCount = student.banCount;
                     }
                     student.ref.update(updates);
+                    var today = new Date().toISOString().substr(0, 10);
+                    db.collection("admin/agendamentos/penalties/" + today + "/details").add(penaltyDetail);
                 })["catch"](function () {
                     log.error("Error on execute history check for " + student.matricula);
                 })];
@@ -1013,6 +1028,36 @@ function isLastIndex(pos, arrayCheck) {
 }
 function isDevMode() {
     return process.env.DEV === "true";
+}
+function incrementTotalUsers() {
+    db.doc('admin/users')
+        .get().then(function (docSnap) {
+        var data = docSnap.data();
+        data.total++;
+        docSnap.ref.update(data);
+    });
+}
+function incrementTodaysSchedule(increment) {
+    if (increment === void 0) { increment = 1; }
+    return __awaiter(this, void 0, void 0, function () {
+        var today;
+        return __generator(this, function (_a) {
+            today = new Date().toISOString().substr(0, 10);
+            return [2 /*return*/, db.doc("admin/agendamentos/history/" + today).get()
+                    .then(function (docSnap) {
+                    return { ref: docSnap.ref, data: docSnap.data() };
+                })
+                    .then(function (obj) {
+                    if (isUndefined(obj.data)) {
+                        obj.data = { total: 0 };
+                    }
+                    obj.data.total += increment;
+                    obj.ref.set(obj.data);
+                })["catch"](function () {
+                    log.error("Error on increment " + today + " schedule");
+                })];
+        });
+    });
 }
 // function countTotalUsers(){
 //   db.collection('estudantes')
